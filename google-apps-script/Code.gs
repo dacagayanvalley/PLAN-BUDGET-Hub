@@ -25,6 +25,7 @@ function dispatch_(action, payload) {
   if (action === 'registerBulkSubmission') return registerBulkSubmission_(payload);
   if (action === 'processBulkSubmission') return processBulkSubmission_(payload);
   if (action === 'createProposalFolder') return createProposalFolder_(payload);
+  if (action === 'upsertRows') return upsertRows_(payload);
   if (action === 'appendAuditLog') return appendRow_('audit_logs', payload);
   throw new Error('Unknown action: ' + action);
 }
@@ -235,6 +236,62 @@ function upsertById_(sheetName, object) {
   });
   if (rowIndex > 0) sheet.getRange(rowIndex + 1, 1, 1, headers.length).setValues([row]);
   else sheet.appendRow(row);
+}
+
+function upsertRows_(payload) {
+  const allowedSheets = [
+    'proposals',
+    'intervention_types',
+    'commodities',
+    'offices',
+    'programs',
+    'paps',
+    'indicators',
+    'municipalities'
+  ];
+  const sheetName = payload.sheetName || payload.sheet_name;
+  if (allowedSheets.indexOf(sheetName) < 0) throw new Error('Batch upsert not allowed for sheet tab: ' + sheetName);
+
+  const rows = payload.rows || [];
+  if (!rows.length) return { inserted: 0, updated: 0, total: 0 };
+
+  const keyField = payload.keyField || payload.key_field || 'id';
+  const sheet = spreadsheet_().getSheetByName(sheetName);
+  if (!sheet) throw new Error('Missing sheet tab: ' + sheetName);
+  const headers = ensureHeaders_(sheet, rows[0]);
+  const values = sheet.getDataRange().getValues();
+  const keyCol = headers.indexOf(keyField);
+  if (keyCol < 0) throw new Error('Missing key header in sheet tab: ' + sheetName + ': ' + keyField);
+
+  const existing = {};
+  for (let i = 1; i < values.length; i++) {
+    const key = values[i][keyCol];
+    if (key) existing[key] = i + 1;
+  }
+
+  let inserted = 0;
+  let updated = 0;
+  const appended = [];
+  rows.forEach(function(object) {
+    const row = headers.map(function(header) {
+      return object[header] || object[toCamel_(header)] || '';
+    });
+    const key = object[keyField] || object[toCamel_(keyField)];
+    const existingRow = existing[key];
+    if (existingRow) {
+      sheet.getRange(existingRow, 1, 1, headers.length).setValues([row]);
+      updated++;
+    } else {
+      appended.push(row);
+      inserted++;
+    }
+  });
+
+  if (appended.length) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, appended.length, headers.length).setValues(appended);
+  }
+
+  return { inserted: inserted, updated: updated, total: rows.length };
 }
 
 function findById_(sheetName, id) {

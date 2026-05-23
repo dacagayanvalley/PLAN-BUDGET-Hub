@@ -97,6 +97,25 @@ def load_rows():
     return records, sorted(interventions.values(), key=str.lower)
 
 
+def intervention_master_rows(interventions):
+    now = "2026-05-23T00:00:00+08:00"
+    rows = []
+    for index, intervention in enumerate(interventions, 1):
+        rows.append({
+            "id": f"XLSX-INT-{index:04d}",
+            "name": intervention,
+            "program": "",
+            "mfo": "",
+            "source_indicator": "",
+            "source_file": SOURCE_FILENAME,
+            "created_at": now,
+            "updated_at": now,
+            "created_by": "Bulk import",
+            "updated_by": "Bulk import",
+        })
+    return rows
+
+
 def post(endpoint, action, payload):
     body = json.dumps({"action": action, "payload": payload}).encode("utf-8")
     request = urllib.request.Request(
@@ -112,6 +131,24 @@ def post(endpoint, action, payload):
     return data.get("data")
 
 
+def post_with_retry(endpoint, action, payload, attempts=4):
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return post(endpoint, action, payload)
+        except Exception as error:
+            last_error = error
+            wait = min(20, attempt * 3)
+            print(f"request failed on attempt {attempt}/{attempts}: {error}; retrying in {wait}s")
+            time.sleep(wait)
+    raise last_error
+
+
+def chunks(values, size):
+    for index in range(0, len(values), size):
+        yield values[index:index + size]
+
+
 def main():
     endpoint = read_endpoint()
     records, interventions = load_rows()
@@ -124,11 +161,22 @@ def main():
     Path("C:/tmp/interventions_import_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     Path("C:/tmp/interventions_unique.txt").write_text("\n".join(interventions), encoding="utf-8")
 
-    for index, record in enumerate(records, 1):
-        post(endpoint, "upsertProposal", record)
-        if index % 100 == 0:
-            print(f"upserted {index}/{len(records)}")
-            time.sleep(0.2)
+    intervention_rows = intervention_master_rows(interventions)
+    for index, batch in enumerate(chunks(intervention_rows, 200), 1):
+        result = post_with_retry(endpoint, "upsertRows", {
+            "sheetName": "intervention_types",
+            "keyField": "id",
+            "rows": batch,
+        })
+        print(f"intervention batch {index}: {result}")
+
+    for index, batch in enumerate(chunks(records, 500), 1):
+        result = post_with_retry(endpoint, "upsertRows", {
+            "sheetName": "proposals",
+            "keyField": "id",
+            "rows": batch,
+        })
+        print(f"proposal batch {index}: {result}")
     print(json.dumps(summary, indent=2))
 
 
