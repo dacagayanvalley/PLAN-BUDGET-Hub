@@ -150,14 +150,15 @@ function App() {
       repo.saveProposalAsync(next)
         .then(() => {
           setData((current) => repo.saveProposal(current, next));
+          setSelectedProposalId("__new__");
           flashSaveNotice(setSaveNotice);
         })
         .catch((error) => setLoadState({ status: "error", error: error.message }));
     } else {
       setData((current) => repo.saveProposal(current, next));
+      setSelectedProposalId("__new__");
       flashSaveNotice(setSaveNotice);
     }
-    setSelectedProposalId(next.id);
   };
 
   const registerBulkSubmission = (submission) => {
@@ -640,13 +641,17 @@ function applyInterventionSelection(current, value, data) {
 }
 
 function applyMunicipalitySelection(current, value, data) {
-  const municipality = data.masterData.municipalities.find((item) => item.name === value);
+  const municipality = data.masterData.municipalities.find((item) => normalizeLookup(item.name) === normalizeLookup(value));
   return {
     ...current,
     municipality: value,
-    province: municipality?.province || current.province,
-    district: municipality?.district || current.district,
+    province: municipality?.province || municipality?.province_id || current.province,
+    district: municipality?.district || municipality?.district_id || current.district,
   };
+}
+
+function normalizeLookup(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function normalizeDraftProposal(proposal) {

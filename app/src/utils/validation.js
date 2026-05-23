@@ -81,7 +81,7 @@ export function validateProposal(proposal, data) {
 
 export function createBlankProposal(data) {
   const program = data.masterData.programs[0] || { name: "", paps: [], uacs: "" };
-  const municipality = data.masterData.municipalities[0] || { name: "", province: "", district: "" };
+  const municipality = data.masterData.municipalities.find((row) => row.name && row.name !== "[not specified]") || { name: "", province: "", district: "" };
   const indicator = data.masterData.indicators[0] || { name: "", unit: "" };
   const mfo = data.masterData.mfos[0] || { name: "" };
   const intervention = data.masterData.interventionTypes[0] || { name: "", mfo: "" };
