@@ -43,11 +43,13 @@ function loadAll_() {
       offices: readObjects_('offices'),
       municipalities: readObjects_('municipalities'),
       districts: readObjects_('districts'),
+      mfos: readObjects_('mfos'),
       programs: readObjects_('programs'),
       paps: readObjects_('paps'),
       commodities: readObjects_('commodities'),
       interventionTypes: readObjects_('intervention_types'),
       indicators: readObjects_('indicators'),
+      unitsOfMeasure: readObjects_('units_of_measure'),
       objectCodes: readObjects_('object_codes'),
       expenseClasses: readObjects_('expense_classes'),
       climateTags: readObjects_('climate_tags'),
@@ -337,7 +339,7 @@ function ensureHeaders_(sheet, object) {
 
 function defaultHeaders_(sheetName, object) {
   const defaults = {
-    proposals: ['id', 'fiscal_year', 'title', 'description', 'office', 'program', 'subprogram', 'pap', 'uacs', 'province', 'municipality', 'district', 'commodity', 'intervention_type', 'beneficiary_group', 'beneficiaries', 'budget_amount', 'nep_amount', 'gaa_amount', 'tier', 'source', 'justification', 'expected_output', 'expected_outcome', 'readiness_status', 'climate_tag', 'climate_rationale', 'gedsi_tag', 'schedule', 'remarks', 'validation_status', 'current_phase', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+    proposals: ['id', 'fiscal_year', 'title', 'description', 'office', 'program', 'subprogram', 'mfo', 'pap', 'uacs', 'province', 'municipality', 'district', 'commodity', 'intervention_type', 'beneficiary_group', 'beneficiaries', 'budget_amount', 'nep_amount', 'gaa_amount', 'tier', 'source', 'justification', 'expected_output', 'expected_outcome', 'readiness_status', 'climate_tag', 'climate_rationale', 'gedsi_tag', 'schedule', 'remarks', 'validation_status', 'current_phase', 'created_at', 'updated_at', 'created_by', 'updated_by'],
     bulk_submissions: ['id', 'fiscal_year', 'program', 'office', 'template_code', 'phase', 'source_file', 'drive_file_id', 'converted_sheet_id', 'drive_folder_url', 'status', 'duplicate_of', 'submitted_at', 'submitted_by', 'remarks', 'created_at', 'updated_at', 'created_by', 'updated_by'],
     bulk_submission_rows: ['id', 'bulk_submission_id', 'source_sheet', 'source_row_number', 'raw_json', 'mapped_proposal_id', 'validation_status', 'validation_notes', 'created_at', 'updated_at', 'created_by', 'updated_by'],
     validation_issues: ['id', 'proposal_id', 'bulk_submission_id', 'bulk_submission_row_id', 'rule_code', 'severity', 'message', 'status', 'resolved_at', 'resolved_by', 'created_at', 'updated_at', 'created_by', 'updated_by'],

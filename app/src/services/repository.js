@@ -11,10 +11,12 @@ export const emptyData = {
     districts: [],
     municipalities: [],
     offices: [],
+    mfos: [],
     programs: [],
     commodities: [],
     interventionTypes: [],
     indicators: [],
+    unitsOfMeasure: [],
     objectCodes: [],
     expenseClasses: [],
     climateTags: [],
@@ -115,6 +117,7 @@ export class GoogleSheetsRepository {
 export function normalizeGoogleData(data) {
   const merged = { ...structuredClone(emptyData), ...(data || {}) };
   const master = { ...emptyData.masterData, ...(data?.masterData || {}) };
+  const indicators = normalizeIndicators(master.indicators);
   return {
     ...merged,
     masterData: {
@@ -122,19 +125,25 @@ export function normalizeGoogleData(data) {
       provinces: normalizeNames(master.provinces),
       districts: normalizeNames(master.districts),
       offices: normalizeNames(master.offices),
+      mfos: normalizeMfos(master.mfos?.length ? master.mfos : uniqueObjects(indicators, "mfo")),
       commodities: normalizeNames(master.commodities),
       interventionTypes: normalizeNames(master.interventionTypes),
+      unitsOfMeasure: normalizeNames(master.unitsOfMeasure?.length ? master.unitsOfMeasure : uniqueObjects(indicators, "unit")),
       objectCodes: normalizeNames(master.objectCodes),
       expenseClasses: normalizeNames(master.expenseClasses),
       climateTags: normalizeNames(master.climateTags),
       gedsiTags: normalizeNames(master.gedsiTags),
       programs: normalizePrograms(master.programs, master.paps),
       municipalities: normalizeMunicipalities(master.municipalities),
-      indicators: normalizeIndicators(master.indicators),
+      indicators,
     },
     proposals: normalizeProposals(merged.proposals, merged.budgetLines, merged.physicalTargets),
     bulkTemplates: normalizeBulkTemplates(merged.bulkTemplates),
   };
+}
+
+function uniqueObjects(rows = [], field) {
+  return [...new Set(rows.map((row) => row?.[field]).filter(Boolean))].map((name) => ({ name }));
 }
 
 function normalizeNames(rows = []) {
@@ -145,8 +154,12 @@ function normalizeMunicipalities(rows = []) {
   return rows.map((row) => (typeof row === "string" ? { name: row, province: "", district: "", psgc: "" } : row));
 }
 
+function normalizeMfos(rows = []) {
+  return rows.map((row) => (typeof row === "string" ? { name: row, code: "", parent_mfo: "" } : row));
+}
+
 function normalizeIndicators(rows = []) {
-  return rows.map((row) => (typeof row === "string" ? { name: row, unit: "" } : row));
+  return rows.map((row) => (typeof row === "string" ? { name: row, unit: "", mfo: "", pi_level: "" } : row));
 }
 
 function normalizePrograms(programs = [], paps = []) {
@@ -168,6 +181,7 @@ function normalizeProposals(proposals = [], budgetLines = [], physicalTargets = 
     title: proposal.title || "",
     office: proposal.office || proposal.office_id || "",
     program: proposal.program || proposal.program_id || "",
+    mfo: proposal.mfo || proposal.mfo_id || "",
     pap: proposal.pap || proposal.pap_id || "",
     province: proposal.province || proposal.province_id || "",
     municipality: proposal.municipality || proposal.municipality_id || "",

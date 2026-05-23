@@ -6,7 +6,7 @@ All tables include `created_at`, `updated_at`, `created_by`, and `updated_by` un
 
 | Sheet/Table | Purpose | Key fields | Source basis |
 |---|---|---|---|
-| `proposals` | One row per proposal/activity/project. | `id`, `fiscal_year`, `title`, `description`, `office_id`, `program_id`, `subprogram`, `pap_id`, `uacs`, `province_id`, `municipality_id`, `district_id`, `commodity_id`, `intervention_type_id`, `beneficiary_group`, `beneficiaries`, `tier`, `source`, `justification`, `expected_output`, `expected_outcome`, `readiness_status`, `climate_tag_id`, `climate_rationale`, `gedsi_tag_id`, `schedule`, `remarks`, `validation_status`, `current_phase` | District proposal workbooks; BP Form 202; internal guidelines |
+| `proposals` | One row per proposal/activity/project. | `id`, `fiscal_year`, `title`, `description`, `office_id`, `program_id`, `subprogram`, `mfo`, `pap_id`, `uacs`, `province_id`, `municipality_id`, `district_id`, `commodity_id`, `intervention_type_id`, `beneficiary_group`, `beneficiaries`, `tier`, `source`, `justification`, `expected_output`, `expected_outcome`, `readiness_status`, `climate_tag_id`, `climate_rationale`, `gedsi_tag_id`, `schedule`, `remarks`, `validation_status`, `current_phase` | District proposal workbooks; BP Form 202; internal guidelines; OPIF Definitions Guidebook |
 | `budget_lines` | Multiple budget lines per proposal. | `id`, `proposal_id`, `object_code_id`, `expense_class`, `amount`, `phase`, `month`, `quarter`, `fund_source` | BED financial capture sheets; BP forms |
 | `physical_targets` | Multiple physical indicators per proposal. | `id`, `proposal_id`, `indicator_id`, `target`, `unit`, `phase`, `month`, `quarter`, `beneficiary_count`, `group_beneficiary_count` | District proposal sheets; BED 2 physical capture |
 | `phase_history` | Immutable phase snapshots. | `id`, `proposal_id`, `phase`, `snapshot_date`, `budget_amount`, `physical_target`, `editor`, `remarks`, `source_report` | Proposal, NEP, GAA, BED, implementation and monitoring workflow |
@@ -26,9 +26,11 @@ All tables include `created_at`, `updated_at`, `created_by`, and `updated_by` un
 | `districts` | `id`, `name`, `province_id` | Supports congressional-district proposal lists. |
 | `programs` | `id`, `name`, `prexc_program`, `uacs` | Extracted from banner-program and BED capture structures. |
 | `paps` | `id`, `program_id`, `name`, `uacs`, `prexc_subprogram` | Prevents free-text PAP/UACS entry. |
+| `mfos` | `id`, `code`, `name`, `parent_mfo`, `description`, `source_file` | Major Final Outputs and OPIF service groupings from `source-files/pdf-references/OPIF Definitions Guidebook.pdf`. |
 | `commodities` | `id`, `name`, `program_id` | Rice, Corn, HVCDP crops, livestock, FMR, etc. |
-| `intervention_types` | `id`, `name`, `program_id` | Production support, extension, infrastructure, machinery, enterprise support. |
-| `indicators` | `id`, `name`, `unit`, `program_id`, `indicator_type` | Used for indicator-unit validation. |
+| `intervention_types` | `id`, `name`, `program_id`, `mfo`, `source_indicator`, `source_file` | OPIF input-level intervention categories such as seeds distributed, trainings conducted, FMRs constructed, market events, facilities, and regulatory documents. |
+| `indicators` | `id`, `name`, `unit`, `program_id`, `mfo`, `pi_level`, `indicator_type`, `definition`, `source_file` | Used for indicator-unit validation; populated from OPIF Performance Indicator definitions. |
+| `units_of_measure` | `id`, `name`, `description`, `source_file` | Controlled unit list from OPIF definitions: number, percent, Philippine Peso, kilograms, pieces, hectares, kilometers, metric tons, copies, times aired, etc. |
 | `object_codes` | `id`, `uacs_object_code`, `name`, `expense_class` | Used in budget lines. |
 | `expense_classes` | `id`, `name` | PS, MOOE, CO, FinEx. |
 | `climate_tags` | `id`, `name`, `requires_rationale` | Supports climate expenditure reporting. |
@@ -47,6 +49,7 @@ Use these fixed values:
 - `source-files/GAA-BED-forms/CORN BED 2.xlsx` and `RICE BED 2.xlsx` require separate financial, physical, obligation, and disbursement captures.
 - `source-files/NEP-forms/QTR BP FORM 202 signed.pdf` requires Tier 2 profile data, objectives, implementation scheme, beneficiary, financial requirement, and readiness attachment fields.
 - `source-files/sample-excel-files/* District * 2027*.xlsx` require proposal intake compatibility with banner-program indicators, FMR project rows, municipality remarks, and annual phase columns.
+- `source-files/pdf-references/OPIF Definitions Guidebook.pdf` defines Major Final Outputs, OPIF/Input indicator levels, performance-indicator definitions, and units of measure used by the `mfos`, `intervention_types`, `indicators`, and `units_of_measure` tabs.
 
 ## Bulk Excel Import Staging
 

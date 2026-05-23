@@ -18,6 +18,7 @@ import {
   MapPinned,
   PenLine,
   Plus,
+  RefreshCw,
   Search,
   Settings,
   ShieldCheck,
@@ -60,6 +61,20 @@ function App() {
   const setActive = (id) => {
     setActiveState(id);
     window.location.hash = id;
+  };
+
+  const reloadProductionData = () => {
+    if (dataMode !== "google") return undefined;
+    setLoadState({ status: "loading", error: "" });
+    return repo.loadAllAsync()
+      .then((nextData) => {
+        setData(nextData);
+        setSelectedProposalId(nextData.proposals[0]?.id);
+        setLoadState({ status: "ready", error: "" });
+      })
+      .catch((error) => {
+        setLoadState({ status: "error", error: error.message });
+      });
   };
 
   useEffect(() => {
@@ -194,7 +209,7 @@ function App() {
 
       <main className="workspace">
         <ProductionBanner dataMode={dataMode} loadState={loadState} />
-        <Header data={data} filters={filters} setFilters={setFilters} />
+        <Header data={data} filters={filters} setFilters={setFilters} onRefresh={reloadProductionData} loadState={loadState} />
         {active === "dashboard" && (
           <Dashboard data={data} proposals={filteredProposals} validationResults={validationResults} />
         )}
@@ -334,7 +349,7 @@ function ProductionBanner({ dataMode, loadState }) {
   return <div className="mode-banner good">Production mode connected to Google Sheets.</div>;
 }
 
-function Header({ data, filters, setFilters }) {
+function Header({ data, filters, setFilters, onRefresh, loadState }) {
   return (
     <header className="topbar">
       <div>
@@ -346,6 +361,12 @@ function Header({ data, filters, setFilters }) {
         <SelectFilter label="Program" value={filters.program} options={["All", ...data.masterData.programs.map((p) => p.name)]} onChange={(program) => setFilters((f) => ({ ...f, program }))} />
         <SelectFilter label="Province" value={filters.province} options={["All", ...data.masterData.provinces]} onChange={(province) => setFilters((f) => ({ ...f, province }))} />
         <SelectFilter label="Status" value={filters.status} options={["All", "Draft", "Needs Correction", "Validated", "Approved"]} onChange={(status) => setFilters((f) => ({ ...f, status }))} />
+        {dataMode === "google" && (
+          <button className="ghost refresh-button" onClick={onRefresh} disabled={loadState.status === "loading"}>
+            <RefreshCw size={16} />
+            {loadState.status === "loading" ? "Refreshing" : "Refresh data"}
+          </button>
+        )}
       </div>
     </header>
   );
@@ -463,6 +484,7 @@ function ProposalIntake({ data, proposal, proposals, onSelect, onNew, onSave }) 
             ["id", "ID"],
             ["title", "Proposal"],
             ["program", "Program"],
+            ["mfo", "MFO"],
             ["municipality", "Municipality"],
             ["budgetAmount", "Budget"],
             ["validationStatus", "Status"],
@@ -477,6 +499,7 @@ function ProposalIntake({ data, proposal, proposals, onSelect, onNew, onSave }) 
           <Input label="Implementing office" value={draft.office} onChange={(v) => update("office", v)} options={data.masterData.offices} />
           <Input label="Program" value={draft.program} onChange={(v) => update("program", v)} options={data.masterData.programs.map((p) => p.name)} />
           <Input label="Subprogram" value={draft.subprogram} onChange={(v) => update("subprogram", v)} />
+          <Input label="MFO / OPIF service" value={draft.mfo} onChange={(v) => update("mfo", v)} options={data.masterData.mfos.map((mfo) => mfo.name)} />
           <Input label="PAP" value={draft.pap} onChange={(v) => update("pap", v)} options={data.masterData.programs.flatMap((p) => p.paps)} />
           <Input label="UACS" value={draft.uacs} onChange={(v) => update("uacs", v)} />
           <Input label="Province" value={draft.province} onChange={(v) => update("province", v)} options={data.masterData.provinces} />
@@ -514,7 +537,7 @@ function ProposalIntake({ data, proposal, proposals, onSelect, onNew, onSave }) 
             <div className="line-row" key={line.id}>
               <Input label="Indicator" value={line.indicator} onChange={(v) => updateTarget(index, "indicator", v)} options={data.masterData.indicators.map((i) => i.name)} />
               <Input label="Target" type="number" value={line.target} onChange={(v) => updateTarget(index, "target", v)} />
-              <Input label="Unit" value={line.unit} onChange={(v) => updateTarget(index, "unit", v)} options={data.masterData.indicators.map((i) => i.unit)} />
+              <Input label="Unit" value={line.unit} onChange={(v) => updateTarget(index, "unit", v)} options={data.masterData.unitsOfMeasure} />
             </div>
           ))}
         </div>
@@ -555,8 +578,10 @@ function MasterData({ data }) {
   const sets = [
     ["Users and roles", data.users.map((u) => ({ name: u.name, role: u.role, office: u.office }))],
     ["Municipality-district map", data.masterData.municipalities],
+    ["Major Final Outputs / OPIF services", data.masterData.mfos],
     ["Programs and PAPs", data.masterData.programs],
     ["Indicators", data.masterData.indicators],
+    ["Units of measure", data.masterData.unitsOfMeasure.map((name) => ({ name }))],
     ["Template registry", data.templates],
     ["Bulk import templates", data.bulkTemplates],
   ];

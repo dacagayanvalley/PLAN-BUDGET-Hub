@@ -15,6 +15,8 @@ The React app is designed so Google Sheets can be replaced by Convex with minima
 | `bulk_submission_rows` | `bulkSubmissionRows` | Staging table for extracted raw rows before accepted proposal writes. |
 | `validation_issues` | `validationIssues` | Store active/resolved state and rule metadata. |
 | `audit_logs` | `auditLogs` | Append-only; consider retention rules. |
+| `mfos` | `mfos` | OPIF Major Final Outputs and service groupings; add unique indexes on `code` and `name`. |
+| `units_of_measure` | `unitsOfMeasure` | Controlled units from OPIF definitions; keep as reference data for physical targets and indicators. |
 | Master data sheets | Same camelCase table names | Normalize IDs and add uniqueness indexes. |
 | `form_templates` | `formTemplates` | Store template config JSON, active fiscal years, Drive file IDs. |
 | `bulk_import_templates` | `bulkImportTemplates` | Store workbook sheet/column mappings and extraction rules. |
@@ -22,10 +24,12 @@ The React app is designed so Google Sheets can be replaced by Convex with minima
 ## Suggested Convex indexes
 
 - `proposals.byFiscalYearProgram`
+- `proposals.byMfo`
 - `proposals.byProvinceDistrictMunicipality`
 - `proposals.byStatusPhase`
 - `budgetLines.byProposal`
 - `physicalTargets.byProposal`
+- `indicators.byMfoLevel`
 - `phaseHistory.byProposalPhase`
 - `attachments.byProposal`
 - `bulkSubmissions.byFiscalYearProgram`

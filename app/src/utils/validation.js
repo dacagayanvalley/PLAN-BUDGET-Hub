@@ -3,6 +3,7 @@ const requiredFields = [
   "title",
   "office",
   "program",
+  "mfo",
   "pap",
   "uacs",
   "province",
@@ -84,6 +85,7 @@ export function createBlankProposal(data) {
   const program = data.masterData.programs[0] || { name: "", paps: [], uacs: "" };
   const municipality = data.masterData.municipalities[0] || { name: "", province: "", district: "" };
   const indicator = data.masterData.indicators[0] || { name: "", unit: "" };
+  const mfo = data.masterData.mfos[0] || { name: "" };
   const objectCode = data.masterData.objectCodes[0] || "";
   const now = new Date().toISOString();
   return {
@@ -94,6 +96,7 @@ export function createBlankProposal(data) {
     office: data.masterData.offices[0] || "",
     program: program.name || "",
     subprogram: "",
+    mfo: mfo.name || "",
     pap: program.paps?.[0] || "",
     uacs: program.uacs || "",
     province: municipality.province || "",

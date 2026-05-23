@@ -1,1 +1,1 @@
-id,name,unit,program,indicator_type,created_at,updated_at,created_by,updated_by
+id,name,unit,program,mfo,pi_level,indicator_type,definition,source_file,created_at,updated_at,created_by,updated_by

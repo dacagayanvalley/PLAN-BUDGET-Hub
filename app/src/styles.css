@@ -190,6 +190,8 @@ tr.selected td, tbody tr:hover td { background: #f7faf7; }
 }
 .primary { border: 0; background: var(--accent); color: #fff; padding: 8px 12px; font-weight: 700; }
 .ghost { background: #fff; color: var(--ink); padding: 7px 10px; }
+.ghost:disabled { color: var(--muted); cursor: wait; opacity: .72; }
+.refresh-button { align-self: end; }
 
 .status {
   display: inline-flex;
