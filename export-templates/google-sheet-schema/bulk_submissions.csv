@@ -1,1 +1,1 @@
-id,fiscal_year,program,office,template_code,phase,source_file,drive_file_id,converted_sheet_id,drive_folder_url,status,submitted_at,submitted_by,remarks,created_at,updated_at,created_by,updated_by
+id,fiscal_year,program,office,template_code,phase,source_file,drive_file_id,converted_sheet_id,drive_folder_url,status,duplicate_of,submitted_at,submitted_by,remarks,created_at,updated_at,created_by,updated_by

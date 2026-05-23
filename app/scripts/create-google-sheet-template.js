@@ -10,7 +10,7 @@ const schemas = {
   physical_targets: ["id", "proposal_id", "indicator", "target", "unit", "phase", "month", "quarter", "beneficiary_count", "group_beneficiary_count", "created_at", "updated_at", "created_by", "updated_by"],
   phase_history: ["id", "proposal_id", "phase", "snapshot_date", "budget_amount", "physical_target", "editor", "remarks", "source_report", "created_at", "updated_at", "created_by", "updated_by"],
   attachments: ["id", "proposal_id", "drive_file_id", "drive_url", "folder_path", "document_type", "name", "phase", "uploaded_by", "created_at", "updated_at", "created_by", "updated_by"],
-  bulk_submissions: ["id", "fiscal_year", "program", "office", "template_code", "phase", "source_file", "drive_file_id", "converted_sheet_id", "drive_folder_url", "status", "submitted_at", "submitted_by", "remarks", "created_at", "updated_at", "created_by", "updated_by"],
+  bulk_submissions: ["id", "fiscal_year", "program", "office", "template_code", "phase", "source_file", "drive_file_id", "converted_sheet_id", "drive_folder_url", "status", "duplicate_of", "submitted_at", "submitted_by", "remarks", "created_at", "updated_at", "created_by", "updated_by"],
   bulk_submission_rows: ["id", "bulk_submission_id", "source_sheet", "source_row_number", "raw_json", "mapped_proposal_id", "validation_status", "validation_notes", "created_at", "updated_at", "created_by", "updated_by"],
   validation_issues: ["id", "proposal_id", "bulk_submission_id", "bulk_submission_row_id", "rule_code", "severity", "message", "status", "resolved_at", "resolved_by", "created_at", "updated_at", "created_by", "updated_by"],
   audit_logs: ["id", "actor", "role", "action", "entity_type", "entity_id", "before_json", "after_json", "timestamp"],

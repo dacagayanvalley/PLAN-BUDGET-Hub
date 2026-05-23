@@ -80,6 +80,72 @@ export function validateProposal(proposal, data) {
   return { status: issues.length ? "Needs Correction" : "Validated", issues };
 }
 
-function normalize(value) {
+export function createBlankProposal(data) {
+  const program = data.masterData.programs[0] || { name: "", paps: [], uacs: "" };
+  const municipality = data.masterData.municipalities[0] || { name: "", province: "", district: "" };
+  const indicator = data.masterData.indicators[0] || { name: "", unit: "" };
+  const objectCode = data.masterData.objectCodes[0] || "";
+  const now = new Date().toISOString();
+  return {
+    id: `PBP-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`,
+    fiscalYear: "2027",
+    title: "",
+    description: "",
+    office: data.masterData.offices[0] || "",
+    program: program.name || "",
+    subprogram: "",
+    pap: program.paps?.[0] || "",
+    uacs: program.uacs || "",
+    province: municipality.province || "",
+    municipality: municipality.name || "",
+    district: municipality.district || "",
+    commodity: data.masterData.commodities[0] || "",
+    interventionType: data.masterData.interventionTypes[0] || "",
+    beneficiaryGroup: "",
+    beneficiaries: 0,
+    budgetAmount: 0,
+    nepAmount: 0,
+    gaaAmount: 0,
+    tier: "Tier 1",
+    source: "",
+    justification: "",
+    expectedOutput: "",
+    expectedOutcome: "",
+    readinessStatus: "Concept",
+    climateTag: data.masterData.climateTags[0] || "",
+    climateRationale: "",
+    gedsiTag: data.masterData.gedsiTags[0] || "",
+    schedule: "",
+    remarks: "",
+    phase: "Proposal",
+    validationStatus: "Draft",
+    budgetLines: [{ id: `BL-${Date.now()}`, objectCode, expenseClass: data.masterData.expenseClasses[0] || "", amount: 0 }],
+    physicalTargets: [{ id: `PT-${Date.now()}`, indicator: indicator.name || "", target: 0, unit: indicator.unit || "" }],
+    created_at: now,
+    updated_at: now,
+    created_by: data.session.user,
+    updated_by: data.session.user,
+  };
+}
+
+export function findDuplicateBulkSubmission(submission, data) {
+  const candidateKey = bulkKey(submission);
+  return (data.bulkSubmissions || []).find((row) => bulkKey(row) === candidateKey);
+}
+
+function bulkKey(row) {
+  return [
+    normalize(row.fiscalYear || row.fiscal_year),
+    normalize(row.templateCode || row.template_code),
+    normalize(extractId(row.convertedSheetId || row.converted_sheet_id) || extractId(row.driveFileUrl || row.drive_file_id) || row.sourceFile || row.source_file),
+  ].join("|");
+}
+
+function extractId(value) {
+  const match = String(value || "").match(/[-\w]{25,}/);
+  return match ? match[0] : String(value || "");
+}
+
+export function normalize(value) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 }

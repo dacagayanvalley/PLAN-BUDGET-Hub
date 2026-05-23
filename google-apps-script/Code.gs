@@ -75,11 +75,13 @@ function upsertProposal_(proposal) {
 }
 
 function registerBulkSubmission_(payload) {
+  const duplicate = findDuplicateBulkSubmission_(payload);
   const folderInfo = createBulkFolder_(payload);
   const row = Object.assign({}, payload, {
     id: payload.id || Utilities.getUuid(),
     drive_folder_url: folderInfo.url,
-    status: 'Preflight Review',
+    status: duplicate ? 'Duplicate' : 'Preflight Review',
+    duplicate_of: duplicate ? duplicate.id : '',
     submitted_at: payload.submitted_at || new Date().toISOString()
   });
   appendRow_('bulk_submissions', row);
@@ -95,6 +97,21 @@ function registerBulkSubmission_(payload) {
     timestamp: new Date().toISOString()
   });
   return row;
+}
+
+function findDuplicateBulkSubmission_(payload) {
+  const key = bulkSubmissionKey_(payload);
+  return readObjects_('bulk_submissions').find(function(row) {
+    return bulkSubmissionKey_(row) === key && String(row.status || '').toLowerCase() !== 'duplicate';
+  });
+}
+
+function bulkSubmissionKey_(row) {
+  return [
+    normalizeText_(row.fiscalYear || row.fiscal_year),
+    normalizeText_(row.templateCode || row.template_code),
+    normalizeText_(extractId_(row.convertedSheetId || row.converted_sheet_id) || extractId_(row.driveFileUrl || row.drive_file_id) || row.sourceFile || row.source_file)
+  ].join('|');
 }
 
 function processBulkSubmission_(payload) {
@@ -321,7 +338,7 @@ function ensureHeaders_(sheet, object) {
 function defaultHeaders_(sheetName, object) {
   const defaults = {
     proposals: ['id', 'fiscal_year', 'title', 'description', 'office', 'program', 'subprogram', 'pap', 'uacs', 'province', 'municipality', 'district', 'commodity', 'intervention_type', 'beneficiary_group', 'beneficiaries', 'budget_amount', 'nep_amount', 'gaa_amount', 'tier', 'source', 'justification', 'expected_output', 'expected_outcome', 'readiness_status', 'climate_tag', 'climate_rationale', 'gedsi_tag', 'schedule', 'remarks', 'validation_status', 'current_phase', 'created_at', 'updated_at', 'created_by', 'updated_by'],
-    bulk_submissions: ['id', 'fiscal_year', 'program', 'office', 'template_code', 'phase', 'source_file', 'drive_file_id', 'converted_sheet_id', 'drive_folder_url', 'status', 'submitted_at', 'submitted_by', 'remarks', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+    bulk_submissions: ['id', 'fiscal_year', 'program', 'office', 'template_code', 'phase', 'source_file', 'drive_file_id', 'converted_sheet_id', 'drive_folder_url', 'status', 'duplicate_of', 'submitted_at', 'submitted_by', 'remarks', 'created_at', 'updated_at', 'created_by', 'updated_by'],
     bulk_submission_rows: ['id', 'bulk_submission_id', 'source_sheet', 'source_row_number', 'raw_json', 'mapped_proposal_id', 'validation_status', 'validation_notes', 'created_at', 'updated_at', 'created_by', 'updated_by'],
     validation_issues: ['id', 'proposal_id', 'bulk_submission_id', 'bulk_submission_row_id', 'rule_code', 'severity', 'message', 'status', 'resolved_at', 'resolved_by', 'created_at', 'updated_at', 'created_by', 'updated_by'],
     audit_logs: ['id', 'actor', 'role', 'action', 'entity_type', 'entity_id', 'before_json', 'after_json', 'timestamp']
@@ -342,6 +359,10 @@ function extractId_(value) {
   const text = String(value || '').trim();
   const match = text.match(/[-\w]{25,}/);
   return match ? match[0] : text;
+}
+
+function normalizeText_(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 function toCamel_(value) {

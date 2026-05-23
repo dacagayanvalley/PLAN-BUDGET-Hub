@@ -28,7 +28,7 @@ import {
 import "./styles.css";
 import { createRepository, getDataMode } from "./services/repository.js";
 import { formatPeso, toCsv, downloadText } from "./utils/format.js";
-import { validateProposal, validateAll } from "./utils/validation.js";
+import { createBlankProposal, findDuplicateBulkSubmission, validateProposal, validateAll } from "./utils/validation.js";
 
 const dataMode = getDataMode();
 const repo = createRepository(dataMode);
@@ -82,7 +82,7 @@ function App() {
     };
   }, []);
 
-  const selectedProposal = data.proposals.find((proposal) => proposal.id === selectedProposalId) ?? data.proposals[0];
+  const selectedProposal = selectedProposalId === "__new__" ? null : (data.proposals.find((proposal) => proposal.id === selectedProposalId) ?? data.proposals[0]);
   const validationResults = useMemo(() => validateAll(data), [data]);
   const filteredProposals = useMemo(() => {
     return data.proposals.filter((proposal) => {
@@ -129,6 +129,20 @@ function App() {
       created_by: data.session.user,
       updated_by: data.session.user,
     };
+    const duplicate = findDuplicateBulkSubmission(next, data);
+    if (duplicate) {
+      const duplicateRow = {
+        ...next,
+        id: `DUP-${String((data.bulkSubmissions?.length || 0) + 1).padStart(4, "0")}`,
+        status: "Duplicate",
+        remarks: `Duplicate of ${duplicate.id || duplicate.sourceFile || duplicate.source_file}. ${next.remarks || ""}`.trim(),
+      };
+      setData((current) => ({
+        ...current,
+        bulkSubmissions: [duplicateRow, ...(current.bulkSubmissions || [])],
+      }));
+      return;
+    }
     if (dataMode === "google") {
       repo.registerBulkSubmissionAsync(next)
         .then((saved) => setData((current) => ({
@@ -190,6 +204,7 @@ function App() {
             proposal={selectedProposal}
             proposals={filteredProposals}
             onSelect={setSelectedProposalId}
+            onNew={() => setSelectedProposalId("__new__")}
             onSave={upsertProposal}
           />
         )}
@@ -235,6 +250,7 @@ function BulkSubmission({ data, onSubmit }) {
     importMode: "Not configured",
   };
   const update = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+  const duplicate = findDuplicateBulkSubmission({ ...form, sourceFile: form.fileName || form.driveFileUrl, converted_sheet_id: form.convertedSheetId }, data);
   const preflightRows = buildPreflightRows(template, form, data);
 
   return (
@@ -269,6 +285,11 @@ function BulkSubmission({ data, onSubmit }) {
           </div>
         </div>
       </Panel>
+      {duplicate && (
+        <Panel title="Possible Duplicate Submission" icon={AlertTriangle}>
+          <p className="body-copy">This file/template/year appears to match existing batch <strong>{duplicate.id}</strong>. Registering it again will be marked as a duplicate for reviewer action.</p>
+        </Panel>
+      )}
 
       <Panel title="Preflight Validation Checklist" icon={ListChecks}>
         <DataTable
@@ -404,9 +425,11 @@ function Kpi({ label, value, icon: Icon, tone }) {
   );
 }
 
-function ProposalIntake({ data, proposal, proposals, onSelect, onSave }) {
-  const [draft, setDraft] = useState(proposal);
-  React.useEffect(() => setDraft(proposal), [proposal?.id]);
+function ProposalIntake({ data, proposal, proposals, onSelect, onNew, onSave }) {
+  const blankProposal = useMemo(() => createBlankProposal(data), [data]);
+  const activeProposal = proposal || blankProposal;
+  const [draft, setDraft] = useState(activeProposal);
+  React.useEffect(() => setDraft(activeProposal), [activeProposal?.id]);
   if (!draft) {
     return (
       <Panel title="No Proposal Selected" icon={PenLine}>
@@ -431,7 +454,7 @@ function ProposalIntake({ data, proposal, proposals, onSelect, onSave }) {
 
   return (
     <section className="content-stack">
-      <Panel title="Proposal Register" icon={Search}>
+      <Panel title="Proposal Register" icon={Search} action={<button className="primary" onClick={onNew}><Plus size={16} /> New Proposal</button>}>
         <DataTable
           rows={proposals}
           onRowClick={(row) => onSelect(row.id)}
@@ -447,7 +470,7 @@ function ProposalIntake({ data, proposal, proposals, onSelect, onSave }) {
           formatters={{ budgetAmount: formatPeso, validationStatus: (value) => <StatusBadge value={value} /> }}
         />
       </Panel>
-      <Panel title="Encode / Edit Proposal" icon={PenLine} action={<button className="primary" onClick={() => onSave(draft)}><CheckCircle2 size={16} /> Validate and Save</button>}>
+      <Panel title={proposal ? "Encode / Edit Proposal" : "Create New Proposal"} icon={PenLine} action={<button className="primary" onClick={() => onSave(draft)}><CheckCircle2 size={16} /> Validate and Save</button>}>
         <div className="form-grid">
           <Input label="Fiscal year" value={draft.fiscalYear} onChange={(v) => update("fiscalYear", v)} />
           <Input label="Proposal title" value={draft.title} onChange={(v) => update("title", v)} wide />
