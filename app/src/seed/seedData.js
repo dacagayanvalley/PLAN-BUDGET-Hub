@@ -42,7 +42,14 @@ export const seedData = {
       { name: "Livestock", paps: ["Livestock Production Support Services"], uacs: "310100100004000" },
     ],
     commodities: ["Rice", "Yellow Corn", "White Corn", "Vegetables", "Coffee", "Cacao", "Cattle", "FMR"],
-    interventionTypes: ["Production support", "Extension/training", "Infrastructure", "Machinery/equipment", "Market development", "Enterprise support"],
+    interventionTypes: [
+      { name: "Seeds distribution", mfo: "Production Support Services", source_indicator: "seeds distributed" },
+      { name: "Planting materials distribution", mfo: "Production Support Services", source_indicator: "planting materials distributed" },
+      { name: "Training conducted", mfo: "Extension Support, Education and Training Services", source_indicator: "trainings conducted" },
+      { name: "FMR construction", mfo: "Farm-to-Market Road Network Services", source_indicator: "FMRs constructed" },
+      { name: "Farm production machinery and equipment", mfo: "Agricultural and Fishery Machinery, Equipment and Facilities Support Services", source_indicator: "farm production-related machinery and equipment distributed" },
+      { name: "Market-related event conducted", mfo: "Market Development Services", source_indicator: "market-related event conducted" },
+    ],
     unitsOfMeasure: ["number", "percent", "Philippine Peso", "kilograms", "pieces", "number of doses", "hectares", "kilometers", "metric tons", "number of copies", "number of times aired", "number of projects"],
     indicators: [
       { name: "number of beneficiaries provided with production support services", unit: "number", mfo: "Production Support Services", pi_level: "OPIF level" },

@@ -6,7 +6,7 @@ All tables include `created_at`, `updated_at`, `created_by`, and `updated_by` un
 
 | Sheet/Table | Purpose | Key fields | Source basis |
 |---|---|---|---|
-| `proposals` | One row per proposal/activity/project. | `id`, `fiscal_year`, `title`, `description`, `office_id`, `program_id`, `subprogram`, `mfo`, `pap_id`, `uacs`, `province_id`, `municipality_id`, `district_id`, `commodity_id`, `intervention_type_id`, `beneficiary_group`, `beneficiaries`, `tier`, `source`, `justification`, `expected_output`, `expected_outcome`, `readiness_status`, `climate_tag_id`, `climate_rationale`, `gedsi_tag_id`, `schedule`, `remarks`, `validation_status`, `current_phase` | District proposal workbooks; BP Form 202; internal guidelines; OPIF Definitions Guidebook |
+| `proposals` | One row per proposal/activity/project. | `id`, `fiscal_year`, system-generated `title`, `description`, `office_id`, `program_id`, `subprogram`, `mfo`/PAP tag, compatibility `pap_id`, `uacs`, `province_id`, `municipality_id`, `district_id`, `commodity_id`, `intervention_type_id`, `beneficiary_group`, `beneficiaries`, `tier`, `source`, `justification`, `expected_output`, `expected_outcome`, `readiness_status`, `climate_tag_id`, `climate_rationale`, `gedsi_tag_id`, `schedule`, `remarks`, `validation_status`, `current_phase` | District proposal workbooks; BP Form 202; internal guidelines; OPIF Definitions Guidebook |
 | `budget_lines` | Multiple budget lines per proposal. | `id`, `proposal_id`, `object_code_id`, `expense_class`, `amount`, `phase`, `month`, `quarter`, `fund_source` | BED financial capture sheets; BP forms |
 | `physical_targets` | Multiple physical indicators per proposal. | `id`, `proposal_id`, `indicator_id`, `target`, `unit`, `phase`, `month`, `quarter`, `beneficiary_count`, `group_beneficiary_count` | District proposal sheets; BED 2 physical capture |
 | `phase_history` | Immutable phase snapshots. | `id`, `proposal_id`, `phase`, `snapshot_date`, `budget_amount`, `physical_target`, `editor`, `remarks`, `source_report` | Proposal, NEP, GAA, BED, implementation and monitoring workflow |
@@ -25,7 +25,7 @@ All tables include `created_at`, `updated_at`, `created_by`, and `updated_by` un
 | `municipalities` | `id`, `name`, `province_id`, `district_id`, `psgc`, `income_class` | Used to prevent invalid municipality-district mapping. |
 | `districts` | `id`, `name`, `province_id` | Supports congressional-district proposal lists. |
 | `programs` | `id`, `name`, `prexc_program`, `uacs` | Extracted from banner-program and BED capture structures. |
-| `paps` | `id`, `program_id`, `name`, `uacs`, `prexc_subprogram` | Prevents free-text PAP/UACS entry. |
+| `paps` | `id`, `program_id`, `name`, `uacs`, `prexc_subprogram` | Legacy/reference Prexc PAP table. In the encoder, the visible PAP field is the OPIF MFO/service tag derived from intervention type. |
 | `mfos` | `id`, `code`, `name`, `parent_mfo`, `description`, `source_file` | Major Final Outputs and OPIF service groupings from `source-files/pdf-references/OPIF Definitions Guidebook.pdf`. |
 | `commodities` | `id`, `name`, `program_id` | Rice, Corn, HVCDP crops, livestock, FMR, etc. |
 | `intervention_types` | `id`, `name`, `program_id`, `mfo`, `source_indicator`, `source_file` | OPIF input-level intervention categories such as seeds distributed, trainings conducted, FMRs constructed, market events, facilities, and regulatory documents. |

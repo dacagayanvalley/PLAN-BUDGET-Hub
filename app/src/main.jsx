@@ -112,12 +112,13 @@ function App() {
 
   const upsertProposal = (proposal) => {
     const now = new Date().toISOString();
+    const normalized = normalizeDraftProposal(proposal);
     const next = {
-      ...proposal,
+      ...normalized,
       updated_at: now,
       updated_by: data.session.user,
-      created_at: proposal.created_at || now,
-      created_by: proposal.created_by || data.session.user,
+      created_at: normalized.created_at || now,
+      created_by: normalized.created_by || data.session.user,
     };
     const result = validateProposal(next, data);
     next.validationStatus = result.issues.length ? "Needs Correction" : "Validated";
@@ -459,7 +460,12 @@ function ProposalIntake({ data, proposal, proposals, onSelect, onNew, onSave }) 
     );
   }
   const issues = validateProposal(draft, data).issues;
-  const update = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
+  const update = (field, value) => setDraft((current) => {
+    if (field === "interventionType") return applyInterventionSelection(current, value, data);
+    if (field === "municipality") return applyMunicipalitySelection(current, value, data);
+    if (field === "mfo") return { ...current, mfo: value, pap: value };
+    return { ...current, [field]: value };
+  });
   const updateBudget = (index, field, value) => {
     setDraft((current) => ({
       ...current,
@@ -482,9 +488,9 @@ function ProposalIntake({ data, proposal, proposals, onSelect, onNew, onSave }) 
           selectedId={draft.id}
           columns={[
             ["id", "ID"],
-            ["title", "Proposal"],
+            ["interventionType", "Intervention"],
             ["program", "Program"],
-            ["mfo", "MFO"],
+            ["mfo", "PAP"],
             ["municipality", "Municipality"],
             ["budgetAmount", "Budget"],
             ["validationStatus", "Status"],
@@ -495,18 +501,16 @@ function ProposalIntake({ data, proposal, proposals, onSelect, onNew, onSave }) 
       <Panel title={proposal ? "Encode / Edit Proposal" : "Create New Proposal"} icon={PenLine} action={<button className="primary" onClick={() => onSave(draft)}><CheckCircle2 size={16} /> Validate and Save</button>}>
         <div className="form-grid">
           <Input label="Fiscal year" value={draft.fiscalYear} onChange={(v) => update("fiscalYear", v)} />
-          <Input label="Proposal title" value={draft.title} onChange={(v) => update("title", v)} wide />
+          <Input label="Intervention type" value={draft.interventionType} onChange={(v) => update("interventionType", v)} options={interventionOptions(data)} wide />
           <Input label="Implementing office" value={draft.office} onChange={(v) => update("office", v)} options={data.masterData.offices} />
           <Input label="Program" value={draft.program} onChange={(v) => update("program", v)} options={data.masterData.programs.map((p) => p.name)} />
           <Input label="Subprogram" value={draft.subprogram} onChange={(v) => update("subprogram", v)} />
-          <Input label="MFO / OPIF service" value={draft.mfo} onChange={(v) => update("mfo", v)} options={data.masterData.mfos.map((mfo) => mfo.name)} />
-          <Input label="PAP" value={draft.pap} onChange={(v) => update("pap", v)} options={data.masterData.programs.flatMap((p) => p.paps)} />
+          <Input label="PAP" value={draft.mfo} onChange={(v) => update("mfo", v)} options={data.masterData.mfos.map((mfo) => mfo.name)} />
           <Input label="UACS" value={draft.uacs} onChange={(v) => update("uacs", v)} />
           <Input label="Province" value={draft.province} onChange={(v) => update("province", v)} options={data.masterData.provinces} />
           <Input label="Municipality" value={draft.municipality} onChange={(v) => update("municipality", v)} options={data.masterData.municipalities.map((m) => m.name)} />
           <Input label="Congressional district" value={draft.district} onChange={(v) => update("district", v)} options={data.masterData.districts} />
           <Input label="Commodity" value={draft.commodity} onChange={(v) => update("commodity", v)} options={data.masterData.commodities} />
-          <Input label="Intervention type" value={draft.interventionType} onChange={(v) => update("interventionType", v)} options={data.masterData.interventionTypes} />
           <Input label="Beneficiary group" value={draft.beneficiaryGroup} onChange={(v) => update("beneficiaryGroup", v)} />
           <Input label="Beneficiaries" type="number" value={draft.beneficiaries} onChange={(v) => update("beneficiaries", Number(v))} />
           <Input label="Tier" value={draft.tier} onChange={(v) => update("tier", v)} options={["Tier 1", "Tier 2"]} />
@@ -572,6 +576,46 @@ function TextArea({ label, value, onChange }) {
       <textarea value={value ?? ""} onChange={(event) => onChange(event.target.value)} rows={3} />
     </label>
   );
+}
+
+function interventionOptions(data) {
+  return data.masterData.interventionTypes.map((item) => (typeof item === "string" ? item : item.name)).filter(Boolean);
+}
+
+function findIntervention(data, name) {
+  return data.masterData.interventionTypes.find((item) => (typeof item === "string" ? item : item.name) === name);
+}
+
+function applyInterventionSelection(current, value, data) {
+  const intervention = findIntervention(data, value);
+  const mfo = typeof intervention === "string" ? "" : intervention?.mfo || "";
+  return {
+    ...current,
+    interventionType: value,
+    mfo: mfo || current.mfo,
+    pap: mfo || current.pap,
+  };
+}
+
+function applyMunicipalitySelection(current, value, data) {
+  const municipality = data.masterData.municipalities.find((item) => item.name === value);
+  return {
+    ...current,
+    municipality: value,
+    province: municipality?.province || current.province,
+    district: municipality?.district || current.district,
+  };
+}
+
+function normalizeDraftProposal(proposal) {
+  const title = [proposal.interventionType, proposal.commodity, proposal.municipality]
+    .filter(Boolean)
+    .join(" - ");
+  return {
+    ...proposal,
+    title: title || proposal.title || "Untitled intervention",
+    pap: proposal.mfo || proposal.pap || "",
+  };
 }
 
 function MasterData({ data }) {
@@ -754,10 +798,10 @@ function Help() {
     <section className="content-stack">
       <Panel title="Sample Workflow" icon={BookOpen}>
         <ol className="workflow">
-          <li>Maintain master lists before encoding proposals, especially municipality-district, PAP/UACS, indicators, object codes, climate, GEDSI, and template records.</li>
-          <li>Encode the proposal once with budget lines, physical targets, justification, readiness evidence, and Drive links.</li>
+          <li>Maintain master lists before encoding, especially intervention type, PAP/OPIF service, municipality-district, UACS, indicators, object codes, climate, GEDSI, and template records.</li>
+          <li>Choose the intervention type first; the PAP/OPIF service is filled from the intervention master data and province/district are filled from the selected municipality.</li>
           <li>For banner-program workbooks, upload the Excel file through Bulk Excel Submission, run template preflight, then extract accepted rows into proposals, budget lines, physical targets, and phase snapshots.</li>
-          <li>Run validation and correct missing required fields, duplicate titles, invalid mapping, Tier 2 readiness gaps, indicator-unit mismatches, and climate rationale gaps.</li>
+          <li>Run validation and correct missing required fields, duplicate interventions, invalid mapping, Tier 2 readiness gaps, indicator-unit mismatches, and climate rationale gaps.</li>
           <li>Freeze phase snapshots for Proposal, DA Internal Review, DBM Submission, NEP, GAA, BED, Implementation, and Monitoring.</li>
           <li>Generate configured reports from the same validated records rather than re-encoding in annual templates.</li>
         </ol>
@@ -784,7 +828,7 @@ function buildPreflightRows(template, form, data) {
     { check: "Office scope", result: !autoOffice || allowsMultiOffice ? "Validated" : "Needs Correction", notes: autoOffice ? "Submitting office will be detected from the DA Operating Unit / Agency column per row." : `${form.office} is the submitting office for this upload.` },
     { check: "Required sheets", result: "Preflight Review", notes: template.expectedSheets.join(", ") },
     { check: "Required columns", result: "Preflight Review", notes: template.requiredColumns.join(", ") },
-    { check: "Master-list matching", result: "Preflight Review", notes: "Municipality, district, PAP, UACS, indicator, unit, object code, expense class, climate, and GEDSI values will be matched before import." },
+    { check: "Master-list matching", result: "Preflight Review", notes: "Intervention, PAP/OPIF service, municipality, district, UACS, indicator, unit, object code, expense class, climate, and GEDSI values will be matched before import." },
   ];
 }
 

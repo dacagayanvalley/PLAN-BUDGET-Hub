@@ -6,7 +6,7 @@ Create a Google Spreadsheet named `PLAN-BUDGET Hub Database` with tabs matching 
 
 Recommended tabs:
 
-`proposals`, `budget_lines`, `physical_targets`, `phase_history`, `attachments`, `bulk_submissions`, `bulk_submission_rows`, `validation_issues`, `audit_logs`, `users`, `offices`, `municipalities`, `districts`, `programs`, `paps`, `commodities`, `intervention_types`, `indicators`, `object_codes`, `expense_classes`, `climate_tags`, `gedsi_tags`, `form_templates`, `bulk_import_templates`.
+`proposals`, `budget_lines`, `physical_targets`, `phase_history`, `attachments`, `bulk_submissions`, `bulk_submission_rows`, `validation_issues`, `audit_logs`, `users`, `offices`, `municipalities`, `districts`, `programs`, `paps`, `mfos`, `commodities`, `intervention_types`, `indicators`, `units_of_measure`, `object_codes`, `expense_classes`, `climate_tags`, `gedsi_tags`, `form_templates`, `bulk_import_templates`.
 
 ## Drive repository
 
@@ -62,11 +62,13 @@ function loadAll_() {
       offices: readObjects_('offices'),
       municipalities: readObjects_('municipalities'),
       districts: readObjects_('districts'),
+      mfos: readObjects_('mfos'),
       programs: readObjects_('programs'),
       paps: readObjects_('paps'),
       commodities: readObjects_('commodities'),
       interventionTypes: readObjects_('intervention_types'),
       indicators: readObjects_('indicators'),
+      unitsOfMeasure: readObjects_('units_of_measure'),
       objectCodes: readObjects_('object_codes'),
       expenseClasses: readObjects_('expense_classes'),
       climateTags: readObjects_('climate_tags'),

@@ -127,7 +127,7 @@ export function normalizeGoogleData(data) {
       offices: normalizeNames(master.offices),
       mfos: normalizeMfos(master.mfos?.length ? master.mfos : uniqueObjects(indicators, "mfo")),
       commodities: normalizeNames(master.commodities),
-      interventionTypes: normalizeNames(master.interventionTypes),
+      interventionTypes: normalizeInterventionTypes(master.interventionTypes),
       unitsOfMeasure: normalizeNames(master.unitsOfMeasure?.length ? master.unitsOfMeasure : uniqueObjects(indicators, "unit")),
       objectCodes: normalizeNames(master.objectCodes),
       expenseClasses: normalizeNames(master.expenseClasses),
@@ -156,6 +156,10 @@ function normalizeMunicipalities(rows = []) {
 
 function normalizeMfos(rows = []) {
   return rows.map((row) => (typeof row === "string" ? { name: row, code: "", parent_mfo: "" } : row));
+}
+
+function normalizeInterventionTypes(rows = []) {
+  return rows.map((row) => (typeof row === "string" ? { name: row, mfo: "", source_indicator: "" } : row));
 }
 
 function normalizeIndicators(rows = []) {
@@ -187,6 +191,14 @@ function normalizeProposals(proposals = [], budgetLines = [], physicalTargets = 
     municipality: proposal.municipality || proposal.municipality_id || "",
     district: proposal.district || proposal.district_id || "",
     budgetAmount: Number(proposal.budgetAmount || proposal.budget_amount || 0),
+    interventionType: proposal.interventionType || proposal.intervention_type || "",
+    beneficiaryGroup: proposal.beneficiaryGroup || proposal.beneficiary_group || "",
+    expectedOutput: proposal.expectedOutput || proposal.expected_output || "",
+    expectedOutcome: proposal.expectedOutcome || proposal.expected_outcome || "",
+    readinessStatus: proposal.readinessStatus || proposal.readiness_status || "",
+    climateTag: proposal.climateTag || proposal.climate_tag || "",
+    climateRationale: proposal.climateRationale || proposal.climate_rationale || "",
+    gedsiTag: proposal.gedsiTag || proposal.gedsi_tag || "",
     nepAmount: Number(proposal.nepAmount || proposal.nep_amount || 0),
     gaaAmount: Number(proposal.gaaAmount || proposal.gaa_amount || 0),
     validationStatus: proposal.validationStatus || proposal.validation_status || "Draft",

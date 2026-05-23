@@ -1,10 +1,8 @@
 const requiredFields = [
   "fiscalYear",
-  "title",
   "office",
   "program",
   "mfo",
-  "pap",
   "uacs",
   "province",
   "municipality",
@@ -25,7 +23,7 @@ const requiredFields = [
 export function validateAll(data) {
   return data.proposals.map((proposal) => ({
     proposalId: proposal.id,
-    title: proposal.title,
+    title: proposal.title || [proposal.interventionType, proposal.municipality].filter(Boolean).join(" - ") || proposal.id,
     issues: validateProposal(proposal, data).issues,
   }));
 }
@@ -41,12 +39,12 @@ export function validateProposal(proposal, data) {
   const duplicate = data.proposals?.find((row) => (
     row.id !== proposal.id &&
     row.fiscalYear === proposal.fiscalYear &&
-    normalize(row.title) === normalize(proposal.title) &&
+    normalize(row.interventionType || row.intervention_type) === normalize(proposal.interventionType || proposal.intervention_type) &&
     row.municipality === proposal.municipality &&
     row.program === proposal.program
   ));
   if (duplicate) {
-    issues.push({ code: "duplicate_activity", message: "Duplicate activity title in the same municipality, program, and fiscal year." });
+    issues.push({ code: "duplicate_activity", message: "Duplicate intervention in the same municipality, program, and fiscal year." });
   }
 
   const municipality = data.masterData.municipalities.find((row) => row.name === proposal.municipality);
@@ -86,8 +84,11 @@ export function createBlankProposal(data) {
   const municipality = data.masterData.municipalities[0] || { name: "", province: "", district: "" };
   const indicator = data.masterData.indicators[0] || { name: "", unit: "" };
   const mfo = data.masterData.mfos[0] || { name: "" };
+  const intervention = data.masterData.interventionTypes[0] || { name: "", mfo: "" };
   const objectCode = data.masterData.objectCodes[0] || "";
   const now = new Date().toISOString();
+  const interventionName = typeof intervention === "string" ? intervention : intervention.name;
+  const mfoName = (typeof intervention === "string" ? "" : intervention.mfo) || mfo.name || "";
   return {
     id: `PBP-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`,
     fiscalYear: "2027",
@@ -96,14 +97,14 @@ export function createBlankProposal(data) {
     office: data.masterData.offices[0] || "",
     program: program.name || "",
     subprogram: "",
-    mfo: mfo.name || "",
-    pap: program.paps?.[0] || "",
+    mfo: mfoName,
+    pap: mfoName,
     uacs: program.uacs || "",
     province: municipality.province || "",
     municipality: municipality.name || "",
     district: municipality.district || "",
     commodity: data.masterData.commodities[0] || "",
-    interventionType: data.masterData.interventionTypes[0] || "",
+    interventionType: interventionName || "",
     beneficiaryGroup: "",
     beneficiaries: 0,
     budgetAmount: 0,

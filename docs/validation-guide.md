@@ -6,8 +6,8 @@ The validation engine is implemented in `app/src/utils/validation.js`.
 
 | Rule | Description | Source basis |
 |---|---|---|
-| Required fields | Fiscal year, title, office, program, PAP, UACS, location, commodity, intervention, beneficiary, budget, tier, source, justification, outputs, outcomes, readiness, and schedule must be complete. | District proposal workbooks and BP Form 202 |
-| Duplicate activity | Flags duplicate activity titles in the same municipality, program, and fiscal year. | Consolidation integrity requirement |
+| Required fields | Fiscal year, office, program, PAP/OPIF service, UACS, location, commodity, intervention, beneficiary, budget, tier, source, justification, outputs, outcomes, readiness, and schedule must be complete. The proposal title is system-generated from intervention, commodity, and municipality. | District proposal workbooks, BP Form 202, and OPIF Definitions Guidebook |
+| Duplicate activity | Flags duplicate interventions in the same municipality, program, and fiscal year. | Consolidation integrity requirement |
 | Municipality-district map | Municipality must match the configured congressional district. | District proposal workbooks and map-ready output |
 | Tier 2 readiness | Tier 2 proposals require justification and readiness status/documents. | Internal guidelines and BP Form 202 |
 | Target without unit | Physical target lines must include unit of measure. | Proposal workbooks and BED 2 |
@@ -23,7 +23,7 @@ The validation engine is implemented in `app/src/utils/validation.js`.
 | Multi-program workbook scope | Regional workbooks such as `BULK-RFO2-SPATIAL` may use `Auto-detect from workbook` for banner program and submitting office when each row contains DA operating unit/agency and commodity/industry fields. | `RFO2_Spatial_Details_of_FY_2027_Budget_FINAL.xlsx` |
 | Expected sheet check | Workbook must include at least one expected sheet for the selected template profile. | Commodity banner worksheets and BED capture sheets |
 | Required column check | Required columns must be present before row extraction. | `PROGRAM/SUBPROGRAM/ INDICATORS`, `UNIT OF MEASURE`, `FY 2027 PROPOSAL`, municipality remarks, FMR project fields, BED financial/physical fields |
-| Master-list matching | Program, PAP, UACS, municipality, district, commodity, indicator, unit, object code, expense class, climate tag, and GEDSI/GAD tag must match configured master data. | Prevents free-text drift from Excel workbooks |
+| Master-list matching | Program, PAP/OPIF service, UACS, municipality, district, commodity, intervention, indicator, unit, object code, expense class, climate tag, and GEDSI/GAD tag must match configured master data. | Prevents free-text drift from Excel workbooks |
 | Row staging | Extracted rows must enter `bulk_submission_rows` first and cannot directly overwrite accepted proposal records. | Data integrity and audit trail |
 | Phase append-only | BED/NEP/GAA uploads must append `phase_history` snapshots and never overwrite proposal-stage values. | Phase tracking requirement |
 | Exception report | Failed rows must produce a downloadable validation exception report for banner-program correction. | Review workflow |

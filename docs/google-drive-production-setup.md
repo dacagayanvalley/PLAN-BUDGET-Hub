@@ -43,7 +43,7 @@ Import each CSV in `export-templates/google-sheet-schema` into a tab with the sa
 
 Minimum tabs required before first run:
 
-`proposals`, `budget_lines`, `physical_targets`, `phase_history`, `attachments`, `bulk_submissions`, `bulk_submission_rows`, `validation_issues`, `audit_logs`, `users`, `offices`, `municipalities`, `districts`, `programs`, `paps`, `commodities`, `intervention_types`, `indicators`, `object_codes`, `expense_classes`, `climate_tags`, `gedsi_tags`, `form_templates`, `bulk_import_templates`.
+`proposals`, `budget_lines`, `physical_targets`, `phase_history`, `attachments`, `bulk_submissions`, `bulk_submission_rows`, `validation_issues`, `audit_logs`, `users`, `offices`, `municipalities`, `districts`, `programs`, `paps`, `mfos`, `commodities`, `intervention_types`, `indicators`, `units_of_measure`, `object_codes`, `expense_classes`, `climate_tags`, `gedsi_tags`, `form_templates`, `bulk_import_templates`.
 
 ## 3. Load only master data first
 
@@ -56,10 +56,12 @@ Start with these master tables:
 - `municipalities`
 - `districts`
 - `programs`
-- `paps`
+- `paps` for legacy/PREXC reference
+- `mfos` for the visible PAP/OPIF service field
 - `commodities`
 - `intervention_types`
 - `indicators`
+- `units_of_measure`
 - `object_codes`
 - `expense_classes`
 - `climate_tags`
