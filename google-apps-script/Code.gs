@@ -173,9 +173,13 @@ function createBulkFolder_(payload) {
 function readObjects_(sheetName) {
   const sheet = spreadsheet_().getSheetByName(sheetName);
   if (!sheet) return [];
+  if (sheet.getLastRow() < 1 || sheet.getLastColumn() < 1) return [];
   const values = sheet.getDataRange().getValues();
   if (!values.length) return [];
-  const headers = values.shift().map(String);
+  const headers = values.shift().map(String).map(function(header) {
+    return header.trim();
+  });
+  if (!headers.some(Boolean)) return [];
   return values.filter(function(row) {
     return row.some(Boolean);
   }).map(function(row) {
@@ -190,7 +194,7 @@ function readObjects_(sheetName) {
 function appendRow_(sheetName, object) {
   const sheet = spreadsheet_().getSheetByName(sheetName);
   if (!sheet) throw new Error('Missing sheet tab: ' + sheetName);
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+  const headers = ensureHeaders_(sheet, object);
   sheet.appendRow(headers.map(function(header) {
     return object[header] || '';
   }));
@@ -200,9 +204,10 @@ function appendRow_(sheetName, object) {
 function upsertById_(sheetName, object) {
   const sheet = spreadsheet_().getSheetByName(sheetName);
   if (!sheet) throw new Error('Missing sheet tab: ' + sheetName);
+  const headers = ensureHeaders_(sheet, object);
   const values = sheet.getDataRange().getValues();
-  const headers = values[0].map(String);
   const idCol = headers.indexOf('id');
+  if (idCol < 0) throw new Error('Missing id header in sheet tab: ' + sheetName);
   const rowIndex = values.findIndex(function(row, index) {
     return index > 0 && row[idCol] === object.id;
   });
@@ -283,6 +288,7 @@ function appendBulkIssue_(submissionId, rowId, sourceSheet, ruleCode, message) {
 
 function updateStatus_(sheetName, id, status) {
   const sheet = spreadsheet_().getSheetByName(sheetName);
+  if (sheet.getLastRow() < 1 || sheet.getLastColumn() < 1) return;
   const values = sheet.getDataRange().getValues();
   const headers = values[0].map(String);
   const idCol = headers.indexOf('id');
@@ -295,6 +301,32 @@ function updateStatus_(sheetName, id, status) {
       return;
     }
   }
+}
+
+function ensureHeaders_(sheet, object) {
+  const lastColumn = sheet.getLastColumn();
+  let headers = [];
+  if (lastColumn > 0) {
+    headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0].map(function(header) {
+      return String(header || '').trim();
+    }).filter(Boolean);
+  }
+  if (!headers.length) {
+    headers = defaultHeaders_(sheet.getName(), object);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  }
+  return headers;
+}
+
+function defaultHeaders_(sheetName, object) {
+  const defaults = {
+    proposals: ['id', 'fiscal_year', 'title', 'description', 'office', 'program', 'subprogram', 'pap', 'uacs', 'province', 'municipality', 'district', 'commodity', 'intervention_type', 'beneficiary_group', 'beneficiaries', 'budget_amount', 'nep_amount', 'gaa_amount', 'tier', 'source', 'justification', 'expected_output', 'expected_outcome', 'readiness_status', 'climate_tag', 'climate_rationale', 'gedsi_tag', 'schedule', 'remarks', 'validation_status', 'current_phase', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+    bulk_submissions: ['id', 'fiscal_year', 'program', 'office', 'template_code', 'phase', 'source_file', 'drive_file_id', 'converted_sheet_id', 'drive_folder_url', 'status', 'submitted_at', 'submitted_by', 'remarks', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+    bulk_submission_rows: ['id', 'bulk_submission_id', 'source_sheet', 'source_row_number', 'raw_json', 'mapped_proposal_id', 'validation_status', 'validation_notes', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+    validation_issues: ['id', 'proposal_id', 'bulk_submission_id', 'bulk_submission_row_id', 'rule_code', 'severity', 'message', 'status', 'resolved_at', 'resolved_by', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+    audit_logs: ['id', 'actor', 'role', 'action', 'entity_type', 'entity_id', 'before_json', 'after_json', 'timestamp']
+  };
+  return defaults[sheetName] || Object.keys(object);
 }
 
 function getOrCreateFolder_(parent, name) {
