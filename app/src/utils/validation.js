@@ -49,7 +49,7 @@ export function validateProposal(proposal, data) {
   }
 
   const municipality = data.masterData.municipalities.find((row) => row.name === proposal.municipality);
-  if (municipality && municipality.district !== proposal.district) {
+  if (municipality?.district && proposal.district && municipality.district !== proposal.district) {
     issues.push({ code: "invalid_municipality_district", message: `${proposal.municipality} is mapped to ${municipality.district}, not ${proposal.district}.` });
   }
 
