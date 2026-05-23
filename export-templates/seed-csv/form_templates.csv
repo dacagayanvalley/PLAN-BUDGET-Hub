@@ -1,0 +1,11 @@
+code,name,sourceFile,phase,outputFormat
+"BP-A","Program budget matrix","source-files/budget-guidelines/NATIONAL-BUDGET-MEMORANDUM-NO.-153_updated BUDGET CALL.pdf","Reporting","CSV/XLSX"
+"BP-B","Performance measures","source-files/sample-excel-files/* District * 2027*.xlsx","Reporting","CSV/XLSX"
+"BP-C-RDC","RDC proposal inputs","source-files/pdf-references/4. Regional Development Councils (RDCs) Process During Budget Preparation.pptx","Proposal/Reporting","CSV/XLSX"
+"BP-D-CSO","CSO consultation inputs","source-files/budget-guidelines/NATIONAL-BUDGET-MEMORANDUM-NO.-153_updated BUDGET CALL.pdf","Proposal/Reporting","CSV/XLSX"
+"BP-202","Tier 2 Profile","source-files/NEP-forms/QTR BP FORM 202 signed.pdf","Proposal/NEP","CSV/XLSX/PDF"
+"BP-206","Convergence matrix","source-files/pdf-references/3. Conduct of Program Convergence Budget (PCB).pptx","Reporting","CSV/XLSX"
+"BP-207","Climate expenditure report","source-files/budget-guidelines/NATIONAL-BUDGET-MEMORANDUM-NO.-153_updated BUDGET CALL.pdf","Reporting","CSV/XLSX"
+"BED-2","Physical Plan","source-files/GAA-BED-forms/RICE BED 2.xlsx","BED","CSV/XLSX"
+"DISTRICT-PROPOSAL","District proposal workbook","source-files/sample-excel-files/* District * 2027*.xlsx","Proposal","XLSX import"
+"BULK-EXCEPTION","Bulk upload exception report","Generated from bulk_submissions and validation_issues","Reporting","CSV/XLSX"

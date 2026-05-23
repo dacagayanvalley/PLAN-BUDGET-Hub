@@ -1,0 +1,5 @@
+proposalId,phase,date,budgetAmount,physicalTarget,editor,remarks
+"PBP-2027-0001","Proposal","2026-05-20","18500000","1250","Rice Encoder","Initial encoded proposal."
+"PBP-2027-0001","NEP","2026-09-15","15000000","1050","Budget Reviewer","Reduced during NEP consolidation."
+"PBP-2027-0001","GAA","2026-12-20","14200000","1000","Budget Reviewer","GAA level recorded."
+"PBP-2027-0001","BED","2027-01-15","14200000","1000","PMED Reviewer","BED No. 2 target locked."

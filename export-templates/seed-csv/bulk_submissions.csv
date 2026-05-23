@@ -1,0 +1,3 @@
+id,fiscalYear,program,office,templateCode,phase,sourceFile,status,submitted_at,submitted_by,remarks,created_at,updated_at,created_by,updated_by
+"BULK-0001","2027","Rice","Rice Program","BULK-COMMODITY","Proposal","1st District Cagayan 2027 Proposal.xlsx","Validated","2026-05-22T09:10:00+08:00","Rice Encoder","Imported from banner-program district workbook.","2026-05-22T09:10:00+08:00","2026-05-22T10:00:00+08:00","Rice Encoder","PMED Reviewer"
+"BULK-0002","2027","FMRDP","FMRDP","BULK-FMR","Proposal","FMR PBP FY 2027.xlsx","Needs Correction","2026-05-22T14:05:00+08:00","Program Encoder","Pending municipality and estimated amount checks.","2026-05-22T14:05:00+08:00","2026-05-22T14:25:00+08:00","Program Encoder","PMED Reviewer"

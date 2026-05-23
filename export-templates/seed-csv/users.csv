@@ -1,0 +1,6 @@
+id,name,role,office
+"USR-001","System Admin","System Admin","RICT"
+"USR-002","PMED Reviewer","PMED/PIPS Reviewer","PMED"
+"USR-003","Rice Encoder","Program Encoder","Rice Program"
+"USR-004","Budget Reviewer","Budget Reviewer","Budget Division"
+"USR-005","Management Viewer","Management Viewer","ORD"

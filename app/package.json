@@ -1,0 +1,24 @@
+{
+  "name": "plan-budget-hub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "dev:demo": "vite --host 127.0.0.1 --mode demo",
+    "build": "vite build",
+    "build:production": "vite build --mode production",
+    "preview": "vite preview --host 127.0.0.1",
+    "seed:csv": "node scripts/seed-google-sheets.js",
+    "schema:csv": "node scripts/create-google-sheet-template.js"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "typescript": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "lucide-react": "latest"
+  },
+  "devDependencies": {}
+}

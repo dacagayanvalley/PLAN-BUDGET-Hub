@@ -1,0 +1,6 @@
+metric,value,source_note
+Total proposals,3,Seed data based on district proposal workbook structure
+Proposed budget,99900000,Proposal and BED capture fields
+NEP amount,88600000,Phase tracking sample
+GAA amount,82800000,Phase tracking sample
+Validation issues,1,Climate rationale demo issue

@@ -1,0 +1,11 @@
+code,name,phase,source_file,output_format
+BP-A,Program budget matrix,Reporting,source-files/budget-guidelines/NATIONAL-BUDGET-MEMORANDUM-NO.-153_updated BUDGET CALL.pdf,csv/xlsx
+BP-B,Performance measures,Reporting,source-files/sample-excel-files/* District * 2027*.xlsx,csv/xlsx
+BP-202,Tier 2 profile,Proposal/NEP,source-files/NEP-forms/QTR BP FORM 202 signed.pdf,csv/xlsx/pdf
+BP-206,Convergence matrix,Reporting,source-files/pdf-references/3. Conduct of Program Convergence Budget (PCB).pptx,csv/xlsx
+BP-207,Climate expenditure report,Reporting,source-files/budget-guidelines/NATIONAL-BUDGET-MEMORANDUM-NO.-153_updated BUDGET CALL.pdf,csv/xlsx
+BED-2,Physical plan,BED,source-files/GAA-BED-forms/RICE BED 2.xlsx,csv/xlsx
+BULK-COMMODITY,Commodity banner program upload,Proposal,source-files/sample-excel-files/* District * 2027*.xlsx,xlsx import
+BULK-FMR,FMR infrastructure upload,Proposal,source-files/sample-excel-files/* District * 2027*.xlsx,xlsx import
+BULK-BED-CAPTURE,BED financial and physical capture upload,BED,source-files/GAA-BED-forms/CORN BED 2.xlsx,xlsx import
+BULK-EXCEPTION,Bulk submission validation exception report,Reporting,Generated from bulk_submission_rows,csv/xlsx
