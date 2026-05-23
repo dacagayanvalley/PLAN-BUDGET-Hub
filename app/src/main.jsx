@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   AlertTriangle,
@@ -255,10 +255,19 @@ function App() {
             onSave={upsertProposal}
           />
         )}
-        {active === "review" && <RecordReview data={data} onSave={upsertProposal} />}
+        {active === "review" && <RecordReview data={data} initialSelectedId={selectedProposalId} onSave={upsertProposal} />}
         {active === "bulk" && <BulkSubmission data={data} onSubmit={registerBulkSubmission} />}
         {active === "master" && <MasterData data={data} />}
-        {active === "validation" && <Validation data={data} validationResults={validationResults} />}
+        {active === "validation" && (
+          <Validation
+            data={data}
+            validationResults={validationResults}
+            onEdit={(proposalId) => {
+              setSelectedProposalId(proposalId);
+              setActive("review");
+            }}
+          />
+        )}
         {active === "consolidation" && <Consolidation proposals={filteredProposals} />}
         {active === "phases" && <PhaseTracking data={data} proposal={selectedProposal} />}
         {active === "reports" && <Reports data={data} proposals={filteredProposals} />}
@@ -520,14 +529,15 @@ function ProposalIntake({ data, proposal, proposals, onSelect, onNew, onSave }) 
   );
 }
 
-function RecordReview({ data, onSave }) {
+function RecordReview({ data, initialSelectedId, onSave }) {
   const [statusFilter, setStatusFilter] = useState("All");
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState(data.proposals[0]?.id || "");
-  const [reviewMode, setReviewMode] = useState(false);
+  const [selectedId, setSelectedId] = useState(initialSelectedId || data.proposals[0]?.id || "");
+  const [reviewMode, setReviewMode] = useState(Boolean(initialSelectedId));
+  const editorRef = useRef(null);
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return data.proposals.filter((proposal) => {
+    return data.proposals.map((proposal, index) => ({ proposal, index })).filter(({ proposal }) => {
       const statusMatches = statusFilter === "All" || proposal.validationStatus === statusFilter;
       const textMatches = !needle || [
         proposal.id,
@@ -539,8 +549,17 @@ function RecordReview({ data, onSave }) {
         proposal.commodity,
       ].some((value) => String(value || "").toLowerCase().includes(needle));
       return statusMatches && textMatches;
-    });
+    }).sort((a, b) => {
+      const editedDelta = Number(isEdited(a.proposal)) - Number(isEdited(b.proposal));
+      return editedDelta || a.index - b.index;
+    }).map(({ proposal }) => proposal);
   }, [data.proposals, query, statusFilter]);
+  useEffect(() => {
+    if (!initialSelectedId) return;
+    setSelectedId(initialSelectedId);
+    setReviewMode(true);
+    window.setTimeout(() => editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  }, [initialSelectedId]);
   useEffect(() => {
     if (!rows.length) {
       setSelectedId("");
@@ -557,6 +576,7 @@ function RecordReview({ data, onSave }) {
   const openRecord = (row) => {
     setSelectedId(row.id);
     setReviewMode(true);
+    window.setTimeout(() => editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   };
 
   return (
@@ -586,7 +606,7 @@ function RecordReview({ data, onSave }) {
             ["edited", "Edited"],
           ]}
           formatters={{
-            id: (value, row) => <button className="link-button" onClick={(event) => { event.stopPropagation(); openRecord(row); }}>{value}</button>,
+            id: (value, row) => <button type="button" className="link-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openRecord(row); }}>{value}</button>,
             budgetAmount: formatPeso,
             validationStatus: (value) => <StatusBadge value={value} />,
             edited: (_value, row) => <EditedBadge row={row} />,
@@ -594,32 +614,34 @@ function RecordReview({ data, onSave }) {
         />
       </Panel>
 
-      <Panel
-        title={draft ? `Edit and Validate ${draft.id}` : "Edit and Validate Record"}
-        icon={PenLine}
-        action={draft && reviewMode && <button className="primary" onClick={() => onSave(draft)}><CheckCircle2 size={16} /> Validate and Save</button>}
-      >
-        {draft && reviewMode ? (
-          <>
-            <div className="record-meta">
-              <StatusBadge value={draft.validationStatus || "Draft"} />
-              <EditedBadge row={draft} />
-              <span>Updated by {draft.updated_by || draft.created_by || "unrecorded user"}</span>
-              <span>{formatDateTime(draft.updated_at || draft.created_at)}</span>
+      <div ref={editorRef}>
+        <Panel
+          title={draft ? `Edit and Validate ${draft.id}` : "Edit and Validate Record"}
+          icon={PenLine}
+          action={draft && reviewMode && <button className="primary" onClick={() => onSave(draft)}><CheckCircle2 size={16} /> Validate and Save</button>}
+        >
+          {draft && reviewMode ? (
+            <>
+              <div className="record-meta">
+                <StatusBadge value={draft.validationStatus || "Draft"} />
+                <EditedBadge row={draft} />
+                <span>Updated by {draft.updated_by || draft.created_by || "unrecorded user"}</span>
+                <span>{formatDateTime(draft.updated_at || draft.created_at)}</span>
+              </div>
+              <ProposalEditorFields data={data} draft={draft} setDraft={setDraft} />
+              <IssueList issues={issues} />
+            </>
+          ) : draft ? (
+            <div className="empty-state">
+              <strong>{draft.id}</strong>
+              <p className="body-copy">Double-click this record in the list, or click its ID, to enter edit and review mode.</p>
+              <button className="primary" onClick={() => setReviewMode(true)}><PenLine size={16} /> Edit / Review</button>
             </div>
-            <ProposalEditorFields data={data} draft={draft} setDraft={setDraft} />
-            <IssueList issues={issues} />
-          </>
-        ) : draft ? (
-          <div className="empty-state">
-            <strong>{draft.id}</strong>
-            <p className="body-copy">Double-click this record in the list, or click its ID, to enter edit and review mode.</p>
-            <button className="primary" onClick={() => setReviewMode(true)}><PenLine size={16} /> Edit / Review</button>
-          </div>
-        ) : (
-          <p className="body-copy">No submitted records match the current review filters.</p>
-        )}
-      </Panel>
+          ) : (
+            <p className="body-copy">No submitted records match the current review filters.</p>
+          )}
+        </Panel>
+      </div>
     </section>
   );
 }
@@ -824,18 +846,18 @@ function MasterData({ data }) {
   );
 }
 
-function Validation({ validationResults }) {
+function Validation({ validationResults, onEdit }) {
   return (
     <section className="content-stack">
       <Panel title="Validation Engine" icon={ShieldCheck}>
         {validationResults.map((result) => (
-          <div key={result.proposalId} className="validation-row">
+          <button key={result.proposalId} type="button" className="validation-row validation-link" onClick={() => onEdit?.(result.proposalId)}>
             <div>
               <strong>{result.title}</strong>
               <span>{result.proposalId}</span>
             </div>
             <IssueList issues={result.issues} />
-          </div>
+          </button>
         ))}
       </Panel>
     </section>
