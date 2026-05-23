@@ -654,8 +654,15 @@ function EditedBadge({ row }) {
 function isEdited(row) {
   const created = row?.created_at || row?.createdAt;
   const updated = row?.updated_at || row?.updatedAt;
+  const createdBy = row?.created_by || row?.createdBy;
+  const updatedBy = row?.updated_by || row?.updatedBy;
+  if (createdBy && updatedBy && normalizeLookup(createdBy) !== normalizeLookup(updatedBy)) return true;
+  if (!created && updated) return true;
   if (!created || !updated) return false;
-  return new Date(updated).getTime() > new Date(created).getTime() + 1000;
+  const createdTime = new Date(created).getTime();
+  const updatedTime = new Date(updated).getTime();
+  if (!Number.isNaN(createdTime) && !Number.isNaN(updatedTime)) return updatedTime > createdTime;
+  return String(updated) !== String(created);
 }
 
 function formatDateTime(value) {
@@ -695,7 +702,7 @@ function ProposalEditorFields({ data, draft, setDraft }) {
         <Input label="Subprogram" value={draft.subprogram} onChange={(v) => update("subprogram", v)} />
         <Input label="PAP" value={draft.mfo} onChange={(v) => update("mfo", v)} options={data.masterData.mfos.map((mfo) => mfo.name)} />
         <Input label="UACS" value={draft.uacs} onChange={(v) => update("uacs", v)} />
-        <Input label="Municipality" value={draft.municipality} onChange={(v) => update("municipality", v)} options={data.masterData.municipalities.map((m) => m.name)} />
+        <Input label="Municipality" value={draft.municipality} onChange={(v) => update("municipality", v)} options={data.masterData.municipalities.map((m) => municipalityName(m)).filter(Boolean)} />
         <Input label="Congressional district" value={draft.district} onChange={(v) => update("district", v)} options={data.masterData.districts} />
         <Input label="Province" value={draft.province} onChange={(v) => update("province", v)} options={data.masterData.provinces} />
         <Input label="Commodity" value={draft.commodity} onChange={(v) => update("commodity", v)} options={data.masterData.commodities} />
@@ -798,17 +805,32 @@ function applyInterventionSelection(current, value, data) {
 }
 
 function applyMunicipalitySelection(current, value, data) {
-  const municipality = data.masterData.municipalities.find((item) => normalizeLookup(item.name) === normalizeLookup(value));
+  const municipality = data.masterData.municipalities.find((item) => normalizeLookup(municipalityName(item)) === normalizeLookup(value));
   return {
     ...current,
     municipality: value,
-    province: municipality?.province || municipality?.province_id || current.province,
-    district: municipality?.district || municipality?.district_id || current.district,
+    province: municipalityProvince(municipality),
+    district: municipalityDistrict(municipality),
   };
 }
 
 function normalizeLookup(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function municipalityName(row) {
+  if (!row) return "";
+  return row.name || row.municipality || row.municipality_name || row.city_municipality || row.lgu || "";
+}
+
+function municipalityProvince(row) {
+  if (!row) return "";
+  return row.province || row.province_name || row.province_id || "";
+}
+
+function municipalityDistrict(row) {
+  if (!row) return "";
+  return row.district || row.congressional_district || row.district_name || row.district_id || "";
 }
 
 function normalizeDraftProposal(proposal) {

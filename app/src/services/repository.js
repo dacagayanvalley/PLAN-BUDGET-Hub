@@ -151,7 +151,16 @@ function normalizeNames(rows = []) {
 }
 
 function normalizeMunicipalities(rows = []) {
-  return rows.map((row) => (typeof row === "string" ? { name: row, province: "", district: "", psgc: "" } : row));
+  return rows.map((row) => {
+    if (typeof row === "string") return { name: row, province: "", district: "", psgc: "" };
+    return {
+      ...row,
+      name: row.name || row.municipality || row.municipality_name || row.city_municipality || row.lgu || "",
+      province: row.province || row.province_name || row.province_id || "",
+      district: row.district || row.congressional_district || row.district_name || row.district_id || "",
+      psgc: row.psgc || row.psgc_code || "",
+    };
+  }).filter((row) => row.name);
 }
 
 function normalizeMfos(rows = []) {
