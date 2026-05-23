@@ -2,6 +2,46 @@
 
 The React app is designed so Google Sheets can be replaced by Convex with minimal UI changes. Keep UI components dependent on repository methods, not storage-specific APIs.
 
+## Current migration status
+
+The first Convex backend scaffold now lives in `app/convex/`.
+
+Implemented backend files:
+
+- `schema.ts` - Convex tables, indexes, and search indexes for proposals, validation issues, master data, attachments, bulk submissions, phase history, and audit logs.
+- `proposals.ts` - paginated/searchable proposal queries and transactional proposal upsert with validation issue regeneration.
+- `validation.ts` - paginated validation issue queries and issue summary.
+- `dashboard.ts` - fiscal-year dashboard summaries and grouped budget outputs.
+- `masterData.ts` - core master-data query and municipality upsert.
+- `imports.ts` - batch import mutations for proposals and municipalities from the Google Sheets/CSV migration path.
+- `validationRules.ts` - Convex-side validation rules matching the browser and Google Apps Script workflow.
+
+The Google Sheets backend remains intact. Switch to Convex only after creating a Convex deployment, importing data, and wiring the React repository to generated Convex APIs.
+
+## Setup commands
+
+From `app/`:
+
+```powershell
+npm install
+npm run convex:dev
+```
+
+During first run, Convex will ask you to create or select a deployment and will generate `convex/_generated/`. Keep that generated folder in the app workspace for local development.
+
+For production, set:
+
+```powershell
+VITE_DATA_MODE=convex
+VITE_CONVEX_URL=https://YOUR-CONVEX-DEPLOYMENT.convex.cloud
+```
+
+Then deploy Convex functions:
+
+```powershell
+npm run convex:deploy
+```
+
 ## Table mapping
 
 | Google Sheet | Convex table | Notes |

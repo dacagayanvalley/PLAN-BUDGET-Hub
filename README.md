@@ -14,6 +14,7 @@ The prototype follows the principle: encode once, validate once, reuse many time
 - Bulk Excel submission workflow for commodity banner program workbooks, FMR/infrastructure sheets, and BED capture workbooks.
 - Source inventory generated from every file under `source-files/` in `docs/source-analysis/source-requirements.md`.
 - Google Sheets/Drive setup guide, data dictionary, role matrix, and Convex migration notes.
+- Convex backend scaffold in `app/convex/` for the next production database phase.
 
 ## Source-file basis
 
@@ -62,9 +63,30 @@ Production builds default to Google mode. Demo/sample records are only loaded wi
 
 The UI and validation logic should not talk to Google APIs directly. CRUD, Drive folder creation, file link/upload registration, report generation, and audit logging should flow through the repository/service layer.
 
+### Convex backend phase
+
+The first Convex backend scaffold is available in `app/convex/`. It includes schema, indexes, paginated proposal queries, validation issue queries, dashboard summaries, import mutations, and transactional proposal upsert.
+
+Use this when moving away from loading the whole Google Sheet in the browser:
+
+```powershell
+cd "C:\Users\Jeff Factora\Downloads\PLAN-BUDGET Hub\app"
+npm run convex:dev
+```
+
+After creating a Convex deployment, set:
+
+```powershell
+VITE_DATA_MODE=convex
+VITE_CONVEX_URL=https://YOUR-CONVEX-DEPLOYMENT.convex.cloud
+```
+
+See `convex-migration/README.md` for the migration sequence and table mapping.
+
 ## Important folders
 
 - `app/src/services/` - repository abstraction and Google Apps Script client.
+- `app/convex/` - Convex schema, queries, mutations, validation rules, and import functions.
 - `app/src/utils/validation.js` - validation engine.
 - `app/src/seed/` - local sample records.
 - `app/scripts/seed-google-sheets.js` - exports optional demo/training CSVs.
