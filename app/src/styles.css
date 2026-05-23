@@ -254,6 +254,16 @@ tr.selected td, tbody tr:hover td { background: #f7faf7; }
 .issue-list.good { color: var(--good); }
 .validation-row { border: 1px solid var(--line); border-radius: 8px; padding: 13px; margin-bottom: 10px; }
 .validation-row span { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; }
+.validation-link {
+  width: 100%;
+  background: #fff;
+  text-align: left;
+  color: inherit;
+}
+.validation-link:hover {
+  background: #f7faf7;
+  border-color: #c7d3ca;
+}
 
 .json-card {
   white-space: pre-wrap;
