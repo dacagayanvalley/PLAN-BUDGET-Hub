@@ -6,7 +6,7 @@ from pathlib import Path
 import openpyxl
 
 
-WORKBOOK = Path(r"C:\Users\Jeff Factora\Downloads\interventions_template_1.xlsx")
+WORKBOOK = Path(r"C:\Users\Jeff Factora\Downloads\interventions_final.xlsx")
 ENV_FILE = Path("app/.env.production")
 FISCAL_YEAR = "2027"
 SOURCE_FILENAME = WORKBOOK.name
@@ -45,6 +45,7 @@ def load_rows():
         intervention = clean(record.get("Intervention"))
         municipality = clean(record.get("Municipality"))
         province = clean(record.get("Province"))
+        district = clean(record.get("District"))
         office = clean(record.get("Implementing Unit"))
         commodity = clean(record.get("Commodity"))
         if intervention:
@@ -67,7 +68,7 @@ def load_rows():
                 "uacs": "",
                 "province": province,
                 "municipality": municipality,
-                "district": "",
+                "district": district,
                 "commodity": commodity,
                 "intervention_type": intervention,
                 "beneficiary_group": "",
