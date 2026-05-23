@@ -252,6 +252,32 @@ tr.selected td, tbody tr:hover td { background: #f7faf7; }
 .issue-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 7px; color: var(--danger); font-size: 13px; }
 .issue-list li, .issue-list.good { display: flex; align-items: center; gap: 7px; }
 .issue-list.good { color: var(--good); }
+.validation-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.validation-count {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfb;
+  padding: 12px;
+  text-align: left;
+}
+.validation-count span { display: block; color: var(--muted); font-size: 12px; font-weight: 800; }
+.validation-count strong { display: block; margin-top: 5px; font-size: 22px; }
+.validation-count.warn strong { color: var(--danger); }
+.validation-count.good strong { color: var(--good); }
+.validation-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.validation-search { min-width: min(460px, 100%); flex: 1; }
+.validation-list { display: grid; gap: 10px; }
 .validation-row { border: 1px solid var(--line); border-radius: 8px; padding: 13px; margin-bottom: 10px; }
 .validation-row span { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; }
 .validation-link {
@@ -259,11 +285,37 @@ tr.selected td, tbody tr:hover td { background: #f7faf7; }
   background: #fff;
   text-align: left;
   color: inherit;
+  margin-bottom: 0;
 }
 .validation-link:hover {
   background: #f7faf7;
   border-color: #c7d3ca;
 }
+.validation-row-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.validation-tags {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 180px;
+}
+.issue-count {
+  display: inline-flex;
+  border-radius: 99px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #344036;
+  background: #e8eee9;
+}
+.issue-count.warn { color: #a34f00; background: #fff0d6; }
+.issue-count.good { color: #0f5f36; background: #e2f4e9; }
 
 .json-card {
   white-space: pre-wrap;

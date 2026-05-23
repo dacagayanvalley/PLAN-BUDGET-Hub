@@ -846,22 +846,120 @@ function MasterData({ data }) {
   );
 }
 
-function Validation({ validationResults, onEdit }) {
+function Validation({ data, validationResults, onEdit }) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [issueFilter, setIssueFilter] = useState("All");
+  const rows = useMemo(() => validationResults.map((result) => {
+    const proposal = data.proposals.find((row) => row.id === result.proposalId) || {};
+    const computedStatus = result.issues.length ? "Needs Correction" : "Validated";
+    return {
+      ...result,
+      proposal,
+      status: proposal.validationStatus || computedStatus,
+      computedStatus,
+      interventionType: proposal.interventionType || "",
+      office: proposal.office || "",
+      municipality: proposal.municipality || "",
+      province: proposal.province || "",
+      program: proposal.program || "",
+      tier: proposal.tier || "",
+      issueCount: result.issues.length,
+      issueCodes: result.issues.map((issue) => issue.code),
+      issueGroups: [...new Set(result.issues.map((issue) => issueGroup(issue.code)))],
+    };
+  }), [data.proposals, validationResults]);
+  const issueOptions = useMemo(() => {
+    const groups = [...new Set(rows.flatMap((row) => row.issueGroups))].sort();
+    return ["All", "No issues", ...groups];
+  }, [rows]);
+  const filteredRows = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return rows.filter((row) => {
+      const statusMatches = statusFilter === "All" || row.status === statusFilter || row.computedStatus === statusFilter;
+      const issueMatches = issueFilter === "All" || (issueFilter === "No issues" ? row.issueCount === 0 : row.issueGroups.includes(issueFilter));
+      const textMatches = !needle || [
+        row.proposalId,
+        row.title,
+        row.interventionType,
+        row.office,
+        row.program,
+        row.municipality,
+        row.province,
+        row.tier,
+      ].some((value) => String(value || "").toLowerCase().includes(needle));
+      return statusMatches && issueMatches && textMatches;
+    }).sort((a, b) => b.issueCount - a.issueCount || a.proposalId.localeCompare(b.proposalId));
+  }, [issueFilter, query, rows, statusFilter]);
+  const summary = useMemo(() => ({
+    all: rows.length,
+    needsCorrection: rows.filter((row) => row.computedStatus === "Needs Correction").length,
+    validated: rows.filter((row) => row.computedStatus === "Validated").length,
+    issues: rows.reduce((sum, row) => sum + row.issueCount, 0),
+  }), [rows]);
+
   return (
     <section className="content-stack">
       <Panel title="Validation Engine" icon={ShieldCheck}>
-        {validationResults.map((result) => (
-          <button key={result.proposalId} type="button" className="validation-row validation-link" onClick={() => onEdit?.(result.proposalId)}>
-            <div>
-              <strong>{result.title}</strong>
-              <span>{result.proposalId}</span>
-            </div>
-            <IssueList issues={result.issues} />
+        <div className="validation-summary">
+          <button type="button" className="validation-count" onClick={() => { setStatusFilter("All"); setIssueFilter("All"); }}>
+            <span>Total records</span>
+            <strong>{summary.all}</strong>
           </button>
-        ))}
+          <button type="button" className="validation-count warn" onClick={() => setStatusFilter("Needs Correction")}>
+            <span>Needs correction</span>
+            <strong>{summary.needsCorrection}</strong>
+          </button>
+          <button type="button" className="validation-count good" onClick={() => setStatusFilter("Validated")}>
+            <span>Validated</span>
+            <strong>{summary.validated}</strong>
+          </button>
+          <button type="button" className="validation-count warn" onClick={() => setIssueFilter("All")}>
+            <span>Total issues</span>
+            <strong>{summary.issues}</strong>
+          </button>
+        </div>
+        <div className="validation-toolbar">
+          <label className="field compact validation-search">
+            <span>Search records</span>
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ID, intervention, program, office, municipality" />
+          </label>
+          <SelectFilter label="Status" value={statusFilter} options={["All", "Draft", "Needs Correction", "Validated", "Approved"]} onChange={setStatusFilter} />
+          <SelectFilter label="Issue type" value={issueFilter} options={issueOptions} onChange={setIssueFilter} />
+        </div>
+        <div className="validation-list">
+          {filteredRows.map((row) => (
+            <button key={row.proposalId} type="button" className="validation-row validation-link" onClick={() => onEdit?.(row.proposalId)}>
+              <div className="validation-row-header">
+                <div>
+                  <strong>{row.title}</strong>
+                  <span>{row.proposalId} · {row.interventionType || "No intervention"} · {row.municipality || "No municipality"}</span>
+                </div>
+                <div className="validation-tags">
+                  <StatusBadge value={row.status} />
+                  <span className={`issue-count ${row.issueCount ? "warn" : "good"}`}>{row.issueCount ? `${row.issueCount} issue${row.issueCount === 1 ? "" : "s"}` : "No issues"}</span>
+                </div>
+              </div>
+              <IssueList issues={row.issues} />
+            </button>
+          ))}
+          {!filteredRows.length && <p className="body-copy">No validation records match the current search and filters.</p>}
+        </div>
       </Panel>
     </section>
   );
+}
+
+function issueGroup(code) {
+  if (code.startsWith("missing_")) return "Missing required fields";
+  if (code.startsWith("target_unit_")) return "Target unit";
+  if (code.startsWith("indicator_unit_")) return "Indicator-unit mismatch";
+  if (code.startsWith("budget_expense_")) return "Budget expense class";
+  if (code === "duplicate_activity") return "Duplicate activity";
+  if (code === "invalid_municipality_district") return "Municipality-district mapping";
+  if (code === "tier2_readiness") return "Tier 2 readiness";
+  if (code === "climate_rationale") return "Climate rationale";
+  return "Other validation issue";
 }
 
 function IssueList({ issues }) {
