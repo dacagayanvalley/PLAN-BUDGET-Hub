@@ -524,6 +524,7 @@ function RecordReview({ data, onSave }) {
   const [statusFilter, setStatusFilter] = useState("All");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(data.proposals[0]?.id || "");
+  const [reviewMode, setReviewMode] = useState(false);
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return data.proposals.filter((proposal) => {
@@ -551,8 +552,12 @@ function RecordReview({ data, onSave }) {
   const [draft, setDraft] = useState(selected);
   useEffect(() => {
     setDraft(selected);
-  }, [selected?.id]);
+  }, [selected?.id, selected?.updated_at, selected?.validationStatus]);
   const issues = draft ? validateProposal(draft, data).issues : [];
+  const openRecord = (row) => {
+    setSelectedId(row.id);
+    setReviewMode(true);
+  };
 
   return (
     <section className="content-stack">
@@ -567,6 +572,7 @@ function RecordReview({ data, onSave }) {
         <DataTable
           rows={rows}
           onRowClick={(row) => setSelectedId(row.id)}
+          onRowDoubleClick={openRecord}
           selectedId={selectedId}
           columns={[
             ["id", "ID"],
@@ -577,27 +583,64 @@ function RecordReview({ data, onSave }) {
             ["tier", "Tier"],
             ["budgetAmount", "Amount"],
             ["validationStatus", "Status"],
+            ["edited", "Edited"],
           ]}
-          formatters={{ budgetAmount: formatPeso, validationStatus: (value) => <StatusBadge value={value} /> }}
+          formatters={{
+            id: (value, row) => <button className="link-button" onClick={(event) => { event.stopPropagation(); openRecord(row); }}>{value}</button>,
+            budgetAmount: formatPeso,
+            validationStatus: (value) => <StatusBadge value={value} />,
+            edited: (_value, row) => <EditedBadge row={row} />,
+          }}
         />
       </Panel>
 
       <Panel
         title={draft ? `Edit and Validate ${draft.id}` : "Edit and Validate Record"}
         icon={PenLine}
-        action={draft && <button className="primary" onClick={() => onSave(draft)}><CheckCircle2 size={16} /> Validate and Save</button>}
+        action={draft && reviewMode && <button className="primary" onClick={() => onSave(draft)}><CheckCircle2 size={16} /> Validate and Save</button>}
       >
-        {draft ? (
+        {draft && reviewMode ? (
           <>
+            <div className="record-meta">
+              <StatusBadge value={draft.validationStatus || "Draft"} />
+              <EditedBadge row={draft} />
+              <span>Updated by {draft.updated_by || draft.created_by || "unrecorded user"}</span>
+              <span>{formatDateTime(draft.updated_at || draft.created_at)}</span>
+            </div>
             <ProposalEditorFields data={data} draft={draft} setDraft={setDraft} />
             <IssueList issues={issues} />
           </>
+        ) : draft ? (
+          <div className="empty-state">
+            <strong>{draft.id}</strong>
+            <p className="body-copy">Double-click this record in the list, or click its ID, to enter edit and review mode.</p>
+            <button className="primary" onClick={() => setReviewMode(true)}><PenLine size={16} /> Edit / Review</button>
+          </div>
         ) : (
           <p className="body-copy">No submitted records match the current review filters.</p>
         )}
       </Panel>
     </section>
   );
+}
+
+function EditedBadge({ row }) {
+  const edited = isEdited(row);
+  return <span className={`edited-badge ${edited ? "yes" : ""}`}>{edited ? "Edited" : "Not edited"}</span>;
+}
+
+function isEdited(row) {
+  const created = row?.created_at || row?.createdAt;
+  const updated = row?.updated_at || row?.updatedAt;
+  if (!created || !updated) return false;
+  return new Date(updated).getTime() > new Date(created).getTime() + 1000;
+}
+
+function formatDateTime(value) {
+  if (!value) return "No timestamp";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
 }
 
 function ProposalEditorFields({ data, draft, setDraft }) {
@@ -1001,7 +1044,7 @@ function BarList({ title, rows }) {
   );
 }
 
-function DataTable({ rows, columns, formatters = {}, onRowClick, selectedId }) {
+function DataTable({ rows, columns, formatters = {}, onRowClick, onRowDoubleClick, selectedId }) {
   return (
     <div className="table-wrap">
       <table>
@@ -1010,7 +1053,12 @@ function DataTable({ rows, columns, formatters = {}, onRowClick, selectedId }) {
         </thead>
         <tbody>
           {rows.map((row, index) => (
-            <tr key={row.id || row.label || index} onClick={() => onRowClick?.(row)} className={selectedId === row.id ? "selected" : ""}>
+            <tr
+              key={row.id || row.label || index}
+              onClick={() => onRowClick?.(row)}
+              onDoubleClick={() => onRowDoubleClick?.(row)}
+              className={selectedId === row.id ? "selected" : ""}
+            >
               {columns.map(([key]) => <td key={key}>{formatters[key] ? formatters[key](row[key], row) : row[key]}</td>)}
             </tr>
           ))}
