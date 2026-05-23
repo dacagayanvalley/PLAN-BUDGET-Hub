@@ -37,6 +37,7 @@ const repo = createRepository(dataMode);
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
   { id: "intake", label: "Proposal Intake", icon: PenLine },
+  { id: "review", label: "Record Review", icon: ShieldCheck },
   { id: "bulk", label: "Bulk Excel Submission", icon: UploadCloud },
   { id: "master", label: "Master Data", icon: Database },
   { id: "validation", label: "Validation", icon: ListChecks },
@@ -254,6 +255,7 @@ function App() {
             onSave={upsertProposal}
           />
         )}
+        {active === "review" && <RecordReview data={data} onSave={upsertProposal} />}
         {active === "bulk" && <BulkSubmission data={data} onSubmit={registerBulkSubmission} />}
         {active === "master" && <MasterData data={data} />}
         {active === "validation" && <Validation data={data} validationResults={validationResults} />}
@@ -490,24 +492,6 @@ function ProposalIntake({ data, proposal, proposals, onSelect, onNew, onSave }) 
     );
   }
   const issues = validateProposal(draft, data).issues;
-  const update = (field, value) => setDraft((current) => {
-    if (field === "interventionType") return applyInterventionSelection(current, value, data);
-    if (field === "municipality") return applyMunicipalitySelection(current, value, data);
-    if (field === "mfo") return { ...current, mfo: value, pap: value };
-    return { ...current, [field]: value };
-  });
-  const updateBudget = (index, field, value) => {
-    setDraft((current) => ({
-      ...current,
-      budgetLines: current.budgetLines.map((line, i) => (i === index ? { ...line, [field]: field === "amount" ? Number(value) : value } : line)),
-    }));
-  };
-  const updateTarget = (index, field, value) => {
-    setDraft((current) => ({
-      ...current,
-      physicalTargets: current.physicalTargets.map((line, i) => (i === index ? { ...line, [field]: field === "target" ? Number(value) : value } : line)),
-    }));
-  };
 
   return (
     <section className="content-stack">
@@ -529,55 +513,163 @@ function ProposalIntake({ data, proposal, proposals, onSelect, onNew, onSave }) 
         />
       </Panel>
       <Panel title={proposal ? "Encode / Edit Proposal" : "Create New Proposal"} icon={PenLine} action={<button className="primary" onClick={() => onSave(draft)}><CheckCircle2 size={16} /> Validate and Save</button>}>
-        <div className="form-grid">
-          <Input label="Fiscal year" value={draft.fiscalYear} onChange={(v) => update("fiscalYear", v)} />
-          <Input label="Intervention type" value={draft.interventionType} onChange={(v) => update("interventionType", v)} options={interventionOptions(data)} wide />
-          <Input label="Implementing office" value={draft.office} onChange={(v) => update("office", v)} options={data.masterData.offices} />
-          <Input label="Program" value={draft.program} onChange={(v) => update("program", v)} options={data.masterData.programs.map((p) => p.name)} />
-          <Input label="Subprogram" value={draft.subprogram} onChange={(v) => update("subprogram", v)} />
-          <Input label="PAP" value={draft.mfo} onChange={(v) => update("mfo", v)} options={data.masterData.mfos.map((mfo) => mfo.name)} />
-          <Input label="UACS" value={draft.uacs} onChange={(v) => update("uacs", v)} />
-          <Input label="Municipality" value={draft.municipality} onChange={(v) => update("municipality", v)} options={data.masterData.municipalities.map((m) => m.name)} />
-          <Input label="Congressional district" value={draft.district} onChange={(v) => update("district", v)} options={data.masterData.districts} />
-          <Input label="Province" value={draft.province} onChange={(v) => update("province", v)} options={data.masterData.provinces} />
-          <Input label="Commodity" value={draft.commodity} onChange={(v) => update("commodity", v)} options={data.masterData.commodities} />
-          <Input label="Beneficiary group" value={draft.beneficiaryGroup} onChange={(v) => update("beneficiaryGroup", v)} />
-          <Input label="Beneficiaries" type="number" value={draft.beneficiaries} onChange={(v) => update("beneficiaries", Number(v))} />
-          <Input label="Tier" value={draft.tier} onChange={(v) => update("tier", v)} options={["Tier 1", "Tier 2"]} />
-          <Input label="Readiness status" value={draft.readinessStatus} onChange={(v) => update("readinessStatus", v)} options={["Concept", "With DED/POW", "Shovel-ready", "For validation"]} />
-          <Input label="Climate tag" value={draft.climateTag} onChange={(v) => update("climateTag", v)} options={data.masterData.climateTags} />
-          <Input label="GEDSI tag" value={draft.gedsiTag} onChange={(v) => update("gedsiTag", v)} options={data.masterData.gedsiTags} />
-          <Input label="Implementation schedule" value={draft.schedule} onChange={(v) => update("schedule", v)} />
-          <Input label="Source of proposal" value={draft.source} onChange={(v) => update("source", v)} options={["RFO consultation", "Congressional request", "RDC", "PIP/TRIP", "Program workshop"]} />
-          <TextArea label="Justification" value={draft.justification} onChange={(v) => update("justification", v)} />
-          <TextArea label="Expected outcome" value={draft.expectedOutcome} onChange={(v) => update("expectedOutcome", v)} options={expectedOutcomeOptions} />
-          <TextArea label="Expected output" value={draft.expectedOutput} onChange={(v) => update("expectedOutput", v)} options={expectedOutputOptions} />
-          <TextArea label="Climate rationale" value={draft.climateRationale} onChange={(v) => update("climateRationale", v)} options={climateRationaleOptions} />
-          <TextArea label="Remarks" value={draft.remarks} onChange={(v) => update("remarks", v)} />
-        </div>
-        <div className="line-editor">
-          <h3>Budget Lines</h3>
-          {draft.budgetLines.map((line, index) => (
-            <div className="line-row" key={line.id}>
-              <Input label="Object code" value={line.objectCode} onChange={(v) => updateBudget(index, "objectCode", v)} options={data.masterData.objectCodes} />
-              <Input label="Expense class" value={line.expenseClass} onChange={(v) => updateBudget(index, "expenseClass", v)} options={data.masterData.expenseClasses} />
-              <Input label="Amount" type="number" value={line.amount} onChange={(v) => updateBudget(index, "amount", v)} />
-            </div>
-          ))}
-        </div>
-        <div className="line-editor">
-          <h3>Physical Targets</h3>
-          {draft.physicalTargets.map((line, index) => (
-            <div className="line-row" key={line.id}>
-              <Input label="Indicator" value={line.indicator} onChange={(v) => updateTarget(index, "indicator", v)} options={data.masterData.indicators.map((i) => i.name)} />
-              <Input label="Target" type="number" value={line.target} onChange={(v) => updateTarget(index, "target", v)} />
-              <Input label="Unit" value={line.unit} onChange={(v) => updateTarget(index, "unit", v)} options={data.masterData.unitsOfMeasure} />
-            </div>
-          ))}
-        </div>
+        <ProposalEditorFields data={data} draft={draft} setDraft={setDraft} />
         <IssueList issues={issues} />
       </Panel>
     </section>
+  );
+}
+
+function RecordReview({ data, onSave }) {
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState(data.proposals[0]?.id || "");
+  const rows = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return data.proposals.filter((proposal) => {
+      const statusMatches = statusFilter === "All" || proposal.validationStatus === statusFilter;
+      const textMatches = !needle || [
+        proposal.id,
+        proposal.interventionType,
+        proposal.municipality,
+        proposal.province,
+        proposal.office,
+        proposal.program,
+        proposal.commodity,
+      ].some((value) => String(value || "").toLowerCase().includes(needle));
+      return statusMatches && textMatches;
+    });
+  }, [data.proposals, query, statusFilter]);
+  useEffect(() => {
+    if (!rows.length) {
+      setSelectedId("");
+      return;
+    }
+    if (!rows.some((row) => row.id === selectedId)) setSelectedId(rows[0].id);
+  }, [rows, selectedId]);
+  const selected = rows.find((proposal) => proposal.id === selectedId) || rows[0] || null;
+  const [draft, setDraft] = useState(selected);
+  useEffect(() => {
+    setDraft(selected);
+  }, [selected?.id]);
+  const issues = draft ? validateProposal(draft, data).issues : [];
+
+  return (
+    <section className="content-stack">
+      <Panel title="Submitted Record Review Queue" icon={ShieldCheck}>
+        <div className="review-filters">
+          <SelectFilter label="Validation status" value={statusFilter} options={["All", "Draft", "Needs Correction", "Validated", "Approved"]} onChange={setStatusFilter} />
+          <label className="field compact review-search">
+            <span>Search</span>
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ID, intervention, office, municipality" />
+          </label>
+        </div>
+        <DataTable
+          rows={rows}
+          onRowClick={(row) => setSelectedId(row.id)}
+          selectedId={selectedId}
+          columns={[
+            ["id", "ID"],
+            ["interventionType", "Intervention"],
+            ["office", "Office"],
+            ["municipality", "Municipality"],
+            ["province", "Province"],
+            ["tier", "Tier"],
+            ["budgetAmount", "Amount"],
+            ["validationStatus", "Status"],
+          ]}
+          formatters={{ budgetAmount: formatPeso, validationStatus: (value) => <StatusBadge value={value} /> }}
+        />
+      </Panel>
+
+      <Panel
+        title={draft ? `Edit and Validate ${draft.id}` : "Edit and Validate Record"}
+        icon={PenLine}
+        action={draft && <button className="primary" onClick={() => onSave(draft)}><CheckCircle2 size={16} /> Validate and Save</button>}
+      >
+        {draft ? (
+          <>
+            <ProposalEditorFields data={data} draft={draft} setDraft={setDraft} />
+            <IssueList issues={issues} />
+          </>
+        ) : (
+          <p className="body-copy">No submitted records match the current review filters.</p>
+        )}
+      </Panel>
+    </section>
+  );
+}
+
+function ProposalEditorFields({ data, draft, setDraft }) {
+  const update = (field, value) => setDraft((current) => {
+    if (field === "interventionType") return applyInterventionSelection(current, value, data);
+    if (field === "municipality") return applyMunicipalitySelection(current, value, data);
+    if (field === "mfo") return { ...current, mfo: value, pap: value };
+    return { ...current, [field]: value };
+  });
+  const updateBudget = (index, field, value) => {
+    setDraft((current) => ({
+      ...current,
+      budgetLines: (current.budgetLines || []).map((line, i) => (i === index ? { ...line, [field]: field === "amount" ? Number(value) : value } : line)),
+    }));
+  };
+  const updateTarget = (index, field, value) => {
+    setDraft((current) => ({
+      ...current,
+      physicalTargets: (current.physicalTargets || []).map((line, i) => (i === index ? { ...line, [field]: field === "target" ? Number(value) : value } : line)),
+    }));
+  };
+
+  return (
+    <>
+      <div className="form-grid">
+        <Input label="Fiscal year" value={draft.fiscalYear} onChange={(v) => update("fiscalYear", v)} />
+        <Input label="Intervention type" value={draft.interventionType} onChange={(v) => update("interventionType", v)} options={interventionOptions(data)} wide />
+        <Input label="Implementing office" value={draft.office} onChange={(v) => update("office", v)} options={data.masterData.offices} />
+        <Input label="Program" value={draft.program} onChange={(v) => update("program", v)} options={data.masterData.programs.map((p) => p.name)} />
+        <Input label="Subprogram" value={draft.subprogram} onChange={(v) => update("subprogram", v)} />
+        <Input label="PAP" value={draft.mfo} onChange={(v) => update("mfo", v)} options={data.masterData.mfos.map((mfo) => mfo.name)} />
+        <Input label="UACS" value={draft.uacs} onChange={(v) => update("uacs", v)} />
+        <Input label="Municipality" value={draft.municipality} onChange={(v) => update("municipality", v)} options={data.masterData.municipalities.map((m) => m.name)} />
+        <Input label="Congressional district" value={draft.district} onChange={(v) => update("district", v)} options={data.masterData.districts} />
+        <Input label="Province" value={draft.province} onChange={(v) => update("province", v)} options={data.masterData.provinces} />
+        <Input label="Commodity" value={draft.commodity} onChange={(v) => update("commodity", v)} options={data.masterData.commodities} />
+        <Input label="Beneficiary group" value={draft.beneficiaryGroup} onChange={(v) => update("beneficiaryGroup", v)} />
+        <Input label="Beneficiaries" type="number" value={draft.beneficiaries} onChange={(v) => update("beneficiaries", Number(v))} />
+        <Input label="Budget amount" type="number" value={draft.budgetAmount} onChange={(v) => update("budgetAmount", Number(v))} />
+        <Input label="Tier" value={draft.tier} onChange={(v) => update("tier", v)} options={["Tier 1", "Tier 2"]} />
+        <Input label="Readiness status" value={draft.readinessStatus} onChange={(v) => update("readinessStatus", v)} options={["Concept", "With DED/POW", "Shovel-ready", "For validation"]} />
+        <Input label="Climate tag" value={draft.climateTag} onChange={(v) => update("climateTag", v)} options={data.masterData.climateTags} />
+        <Input label="GEDSI tag" value={draft.gedsiTag} onChange={(v) => update("gedsiTag", v)} options={data.masterData.gedsiTags} />
+        <Input label="Implementation schedule" value={draft.schedule} onChange={(v) => update("schedule", v)} />
+        <Input label="Source of proposal" value={draft.source} onChange={(v) => update("source", v)} options={["RFO consultation", "Congressional request", "RDC", "PIP/TRIP", "Program workshop", "Bulk Excel submission"]} />
+        <TextArea label="Justification" value={draft.justification} onChange={(v) => update("justification", v)} />
+        <TextArea label="Expected outcome" value={draft.expectedOutcome} onChange={(v) => update("expectedOutcome", v)} options={expectedOutcomeOptions} />
+        <TextArea label="Expected output" value={draft.expectedOutput} onChange={(v) => update("expectedOutput", v)} options={expectedOutputOptions} />
+        <TextArea label="Climate rationale" value={draft.climateRationale} onChange={(v) => update("climateRationale", v)} options={climateRationaleOptions} />
+        <TextArea label="Remarks" value={draft.remarks} onChange={(v) => update("remarks", v)} />
+      </div>
+      <div className="line-editor">
+        <h3>Budget Lines</h3>
+        {(draft.budgetLines || []).length ? (draft.budgetLines || []).map((line, index) => (
+          <div className="line-row" key={line.id || index}>
+            <Input label="Object code" value={line.objectCode} onChange={(v) => updateBudget(index, "objectCode", v)} options={data.masterData.objectCodes} />
+            <Input label="Expense class" value={line.expenseClass} onChange={(v) => updateBudget(index, "expenseClass", v)} options={data.masterData.expenseClasses} />
+            <Input label="Amount" type="number" value={line.amount} onChange={(v) => updateBudget(index, "amount", v)} />
+          </div>
+        )) : <p className="body-copy">No budget line rows yet. Use the main Budget amount field for imported records until detailed object codes are added.</p>}
+      </div>
+      <div className="line-editor">
+        <h3>Physical Targets</h3>
+        {(draft.physicalTargets || []).length ? (draft.physicalTargets || []).map((line, index) => (
+          <div className="line-row" key={line.id || index}>
+            <Input label="Indicator" value={line.indicator} onChange={(v) => updateTarget(index, "indicator", v)} options={data.masterData.indicators.map((i) => i.name)} />
+            <Input label="Target" type="number" value={line.target} onChange={(v) => updateTarget(index, "target", v)} />
+            <Input label="Unit" value={line.unit} onChange={(v) => updateTarget(index, "unit", v)} options={data.masterData.unitsOfMeasure} />
+          </div>
+        )) : <p className="body-copy">No physical target rows yet. Add indicator and unit details when the reviewing office supplies the final target breakdown.</p>}
+      </div>
+    </>
   );
 }
 
@@ -662,6 +754,8 @@ function normalizeDraftProposal(proposal) {
     ...proposal,
     title: title || proposal.title || "Untitled intervention",
     pap: proposal.mfo || proposal.pap || "",
+    budgetLines: proposal.budgetLines || [],
+    physicalTargets: proposal.physicalTargets || [],
   };
 }
 
