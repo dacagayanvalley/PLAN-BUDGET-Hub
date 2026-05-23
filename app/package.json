@@ -9,16 +9,18 @@
     "build": "vite build",
     "build:production": "vite build --mode production",
     "preview": "vite preview --host 127.0.0.1",
+    "convex:dev": "convex dev",
+    "convex:deploy": "convex deploy",
     "seed:csv": "node scripts/seed-google-sheets.js",
     "schema:csv": "node scripts/create-google-sheet-template.js"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "latest",
+    "convex": "^1.39.1",
+    "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "latest"
-  },
-  "devDependencies": {}
+    "typescript": "latest",
+    "vite": "latest"
+  }
 }
