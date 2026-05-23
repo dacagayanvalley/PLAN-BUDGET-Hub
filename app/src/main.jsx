@@ -47,6 +47,29 @@ const navItems = [
   { id: "help", label: "Help", icon: BookOpen },
 ];
 
+const expectedOutcomeOptions = [
+  "Improved productivity and resilience of targeted farmers and fisherfolk.",
+  "Increased market access and reduced postharvest losses for beneficiary groups.",
+  "Improved delivery of agriculture and fishery support services.",
+  "Enhanced climate resilience of priority production areas.",
+  "Increased adoption of recommended technologies and good practices.",
+];
+
+const expectedOutputOptions = [
+  "Production support inputs distributed to targeted beneficiaries.",
+  "Training or extension activity completed with documented participants.",
+  "Infrastructure or facility completed, validated, and ready for turnover/use.",
+  "Machinery, equipment, or postharvest support delivered to qualified beneficiaries.",
+  "Market linkage, consultation, or coordination activity completed with MOVs.",
+];
+
+const climateRationaleOptions = [
+  "Supports climate adaptation through climate-resilient production inputs and timing.",
+  "Supports mitigation through reduced losses, efficient logistics, or lower-emission practices.",
+  "Improves adaptive capacity of vulnerable farmers, fisherfolk, and communities.",
+  "Not climate tagged.",
+];
+
 function App() {
   const [active, setActiveState] = useState(() => window.location.hash.replace("#", "") || "dashboard");
   const [data, setData] = useState(() => repo.loadAll());
@@ -58,6 +81,7 @@ function App() {
     status: "All",
   });
   const [selectedProposalId, setSelectedProposalId] = useState(data.proposals[0]?.id);
+  const [saveNotice, setSaveNotice] = useState("");
   const setActive = (id) => {
     setActiveState(id);
     window.location.hash = id;
@@ -124,10 +148,14 @@ function App() {
     next.validationStatus = result.issues.length ? "Needs Correction" : "Validated";
     if (dataMode === "google") {
       repo.saveProposalAsync(next)
-        .then(() => setData((current) => repo.saveProposal(current, next)))
+        .then(() => {
+          setData((current) => repo.saveProposal(current, next));
+          flashSaveNotice(setSaveNotice);
+        })
         .catch((error) => setLoadState({ status: "error", error: error.message }));
     } else {
       setData((current) => repo.saveProposal(current, next));
+      flashSaveNotice(setSaveNotice);
     }
     setSelectedProposalId(next.id);
   };
@@ -210,6 +238,7 @@ function App() {
 
       <main className="workspace">
         <ProductionBanner dataMode={dataMode} loadState={loadState} />
+        {saveNotice && <div className="toast good">{saveNotice}</div>}
         <Header data={data} filters={filters} setFilters={setFilters} onRefresh={reloadProductionData} loadState={loadState} />
         {active === "dashboard" && (
           <Dashboard data={data} proposals={filteredProposals} validationResults={validationResults} />
@@ -507,9 +536,9 @@ function ProposalIntake({ data, proposal, proposals, onSelect, onNew, onSave }) 
           <Input label="Subprogram" value={draft.subprogram} onChange={(v) => update("subprogram", v)} />
           <Input label="PAP" value={draft.mfo} onChange={(v) => update("mfo", v)} options={data.masterData.mfos.map((mfo) => mfo.name)} />
           <Input label="UACS" value={draft.uacs} onChange={(v) => update("uacs", v)} />
-          <Input label="Province" value={draft.province} onChange={(v) => update("province", v)} options={data.masterData.provinces} />
           <Input label="Municipality" value={draft.municipality} onChange={(v) => update("municipality", v)} options={data.masterData.municipalities.map((m) => m.name)} />
           <Input label="Congressional district" value={draft.district} onChange={(v) => update("district", v)} options={data.masterData.districts} />
+          <Input label="Province" value={draft.province} onChange={(v) => update("province", v)} options={data.masterData.provinces} />
           <Input label="Commodity" value={draft.commodity} onChange={(v) => update("commodity", v)} options={data.masterData.commodities} />
           <Input label="Beneficiary group" value={draft.beneficiaryGroup} onChange={(v) => update("beneficiaryGroup", v)} />
           <Input label="Beneficiaries" type="number" value={draft.beneficiaries} onChange={(v) => update("beneficiaries", Number(v))} />
@@ -520,9 +549,9 @@ function ProposalIntake({ data, proposal, proposals, onSelect, onNew, onSave }) 
           <Input label="Implementation schedule" value={draft.schedule} onChange={(v) => update("schedule", v)} />
           <Input label="Source of proposal" value={draft.source} onChange={(v) => update("source", v)} options={["RFO consultation", "Congressional request", "RDC", "PIP/TRIP", "Program workshop"]} />
           <TextArea label="Justification" value={draft.justification} onChange={(v) => update("justification", v)} />
-          <TextArea label="Expected output" value={draft.expectedOutput} onChange={(v) => update("expectedOutput", v)} />
-          <TextArea label="Expected outcome" value={draft.expectedOutcome} onChange={(v) => update("expectedOutcome", v)} />
-          <TextArea label="Climate rationale" value={draft.climateRationale} onChange={(v) => update("climateRationale", v)} />
+          <TextArea label="Expected outcome" value={draft.expectedOutcome} onChange={(v) => update("expectedOutcome", v)} options={expectedOutcomeOptions} />
+          <TextArea label="Expected output" value={draft.expectedOutput} onChange={(v) => update("expectedOutput", v)} options={expectedOutputOptions} />
+          <TextArea label="Climate rationale" value={draft.climateRationale} onChange={(v) => update("climateRationale", v)} options={climateRationaleOptions} />
           <TextArea label="Remarks" value={draft.remarks} onChange={(v) => update("remarks", v)} />
         </div>
         <div className="line-editor">
@@ -569,13 +598,26 @@ function Input({ label, value, onChange, type = "text", options, wide }) {
   );
 }
 
-function TextArea({ label, value, onChange }) {
+function TextArea({ label, value, onChange, options }) {
   return (
     <label className="field wide">
       <span>{label}</span>
+      {options?.length ? (
+        <select value="" onChange={(event) => event.target.value && onChange(event.target.value)}>
+          <option value="">Select a standard option...</option>
+          {options.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+      ) : null}
       <textarea value={value ?? ""} onChange={(event) => onChange(event.target.value)} rows={3} />
     </label>
   );
+}
+
+function flashSaveNotice(setSaveNotice) {
+  setSaveNotice("Data entry successfully uploaded and saved in the database.");
+  window.setTimeout(() => setSaveNotice(""), 4500);
 }
 
 function interventionOptions(data) {
