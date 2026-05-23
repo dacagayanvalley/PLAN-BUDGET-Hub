@@ -1,6 +1,14 @@
 const SPREADSHEET_ID = 'PUT_PRODUCTION_SPREADSHEET_ID_HERE';
 const DRIVE_ROOT_FOLDER_ID = 'PUT_PLAN_BUDGET_HUB_ROOT_FOLDER_ID_HERE';
 
+function spreadsheet_() {
+  return SpreadsheetApp.openById(extractId_(SPREADSHEET_ID));
+}
+
+function driveRootFolder_() {
+  return DriveApp.getFolderById(extractId_(DRIVE_ROOT_FOLDER_ID));
+}
+
 function doPost(e) {
   try {
     const request = JSON.parse(e.postData.contents || '{}');
@@ -92,7 +100,8 @@ function registerBulkSubmission_(payload) {
 function processBulkSubmission_(payload) {
   const submission = findById_('bulk_submissions', payload.id);
   if (!submission) throw new Error('Bulk submission not found: ' + payload.id);
-  if (!submission.converted_sheet_id) {
+  const convertedSheetId = extractId_(submission.converted_sheet_id);
+  if (!convertedSheetId) {
     throw new Error('converted_sheet_id is required. Upload Excel to Drive and convert it to Google Sheets before extraction.');
   }
 
@@ -101,7 +110,7 @@ function processBulkSubmission_(payload) {
 
   const expectedSheets = splitList_(template.expectedSheets || template.expected_sheets);
   const requiredColumns = splitList_(template.requiredColumns || template.required_columns);
-  const source = SpreadsheetApp.openById(submission.converted_sheet_id);
+  const source = SpreadsheetApp.openById(convertedSheetId);
   let stagedCount = 0;
 
   expectedSheets.forEach(function(sheetName) {
@@ -115,7 +124,7 @@ function processBulkSubmission_(payload) {
       return;
     }
 
-    const headers = values[headerRowIndex].map(String);
+    const headers = buildHeaders_(values, headerRowIndex);
     values.slice(headerRowIndex + 1).forEach(function(row, offset) {
       if (!row.some(Boolean)) return;
       const raw = {};
@@ -145,7 +154,7 @@ function processBulkSubmission_(payload) {
 }
 
 function createProposalFolder_(payload) {
-  const root = DriveApp.getFolderById(DRIVE_ROOT_FOLDER_ID);
+  const root = driveRootFolder_();
   const fy = getOrCreateFolder_(root, 'FY ' + payload.fiscal_year);
   const program = getOrCreateFolder_(fy, payload.program);
   const proposal = getOrCreateFolder_(program, payload.proposal_id);
@@ -153,7 +162,7 @@ function createProposalFolder_(payload) {
 }
 
 function createBulkFolder_(payload) {
-  const root = DriveApp.getFolderById(DRIVE_ROOT_FOLDER_ID);
+  const root = driveRootFolder_();
   const bulkRoot = getOrCreateFolder_(root, '01 Bulk Submissions');
   const year = payload.fiscalYear || payload.fiscal_year || 'Unspecified FY';
   const fy = getOrCreateFolder_(bulkRoot, 'FY ' + year);
@@ -162,7 +171,7 @@ function createBulkFolder_(payload) {
 }
 
 function readObjects_(sheetName) {
-  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(sheetName);
+  const sheet = spreadsheet_().getSheetByName(sheetName);
   if (!sheet) return [];
   const values = sheet.getDataRange().getValues();
   if (!values.length) return [];
@@ -179,7 +188,7 @@ function readObjects_(sheetName) {
 }
 
 function appendRow_(sheetName, object) {
-  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(sheetName);
+  const sheet = spreadsheet_().getSheetByName(sheetName);
   if (!sheet) throw new Error('Missing sheet tab: ' + sheetName);
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
   sheet.appendRow(headers.map(function(header) {
@@ -189,7 +198,7 @@ function appendRow_(sheetName, object) {
 }
 
 function upsertById_(sheetName, object) {
-  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(sheetName);
+  const sheet = spreadsheet_().getSheetByName(sheetName);
   if (!sheet) throw new Error('Missing sheet tab: ' + sheetName);
   const values = sheet.getDataRange().getValues();
   const headers = values[0].map(String);
@@ -233,6 +242,23 @@ function findHeaderRow_(values, requiredColumns) {
   return -1;
 }
 
+function buildHeaders_(values, headerRowIndex) {
+  const primary = values[headerRowIndex].map(function(value) {
+    return String(value || '').trim();
+  });
+  const secondary = values[headerRowIndex + 1] ? values[headerRowIndex + 1].map(function(value) {
+    return String(value || '').trim();
+  }) : [];
+  let currentGroup = '';
+  return primary.map(function(header, index) {
+    const sub = secondary[index] || '';
+    if (header) currentGroup = header;
+    const base = header || currentGroup || ('Column ' + (index + 1));
+    if (sub && sub !== base && sub.indexOf('(') !== 0) return base + ' - ' + sub;
+    return base;
+  });
+}
+
 function validateBulkRawRow_(raw) {
   const issues = [];
   if (!Object.values(raw).some(Boolean)) issues.push('Blank row');
@@ -256,7 +282,7 @@ function appendBulkIssue_(submissionId, rowId, sourceSheet, ruleCode, message) {
 }
 
 function updateStatus_(sheetName, id, status) {
-  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(sheetName);
+  const sheet = spreadsheet_().getSheetByName(sheetName);
   const values = sheet.getDataRange().getValues();
   const headers = values[0].map(String);
   const idCol = headers.indexOf('id');
@@ -278,6 +304,12 @@ function getOrCreateFolder_(parent, name) {
 
 function json_(payload) {
   return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function extractId_(value) {
+  const text = String(value || '').trim();
+  const match = text.match(/[-\w]{25,}/);
+  return match ? match[0] : text;
 }
 
 function toCamel_(value) {

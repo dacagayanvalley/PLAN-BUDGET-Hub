@@ -28,7 +28,7 @@ const schemas = {
   climate_tags: ["id", "name", "requires_rationale", "created_at", "updated_at", "created_by", "updated_by"],
   gedsi_tags: ["id", "name", "created_at", "updated_at", "created_by", "updated_by"],
   form_templates: ["id", "code", "name", "source_file", "phase", "output_format", "config_json", "active_from_fy", "active_to_fy", "created_at", "updated_at", "created_by", "updated_by"],
-  bulk_import_templates: ["id", "code", "name", "description", "expectedSheets", "requiredColumns", "mapping_json", "importMode", "sourceBasis", "active", "created_at", "updated_at", "created_by", "updated_by"],
+  bulk_import_templates: ["id", "code", "name", "description", "expectedSheets", "requiredColumns", "mapping_json", "importMode", "sourceBasis", "allow_multiple_programs", "allow_multiple_offices", "program_detection", "active", "created_at", "updated_at", "created_by", "updated_by"],
 };
 
 for (const [sheetName, headers] of Object.entries(schemas)) {

@@ -34,7 +34,7 @@ All tables include `created_at`, `updated_at`, `created_by`, and `updated_by` un
 | `climate_tags` | `id`, `name`, `requires_rationale` | Supports climate expenditure reporting. |
 | `gedsi_tags` | `id`, `name` | Uses GAD/GEDSI source tags and local categories. |
 | `form_templates` | `id`, `code`, `name`, `source_file`, `phase`, `output_format`, `config_json`, `active_from_fy`, `active_to_fy` | Avoids hard-coded annual templates. |
-| `bulk_import_templates` | `id`, `code`, `name`, `expected_sheets`, `required_columns`, `mapping_json`, `import_mode`, `source_basis`, `active` | Controls Excel import parsing per annual/banner-program template. |
+| `bulk_import_templates` | `id`, `code`, `name`, `expected_sheets`, `required_columns`, `mapping_json`, `import_mode`, `source_basis`, `allow_multiple_programs`, `allow_multiple_offices`, `program_detection`, `active` | Controls Excel import parsing per annual/banner-program template. |
 
 ## Phase Names
 

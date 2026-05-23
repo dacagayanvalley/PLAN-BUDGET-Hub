@@ -209,18 +209,20 @@ function App() {
 function BulkSubmission({ data, onSubmit }) {
   const [form, setForm] = useState({
     fiscalYear: "2027",
-    program: data.masterData.programs[0]?.name || "",
-    office: data.masterData.offices[0] || "",
+    program: "Auto-detect from workbook",
+    office: "Auto-detect from workbook",
     templateCode: data.bulkTemplates[0]?.code || "",
     phase: "Proposal",
     fileName: "",
+    driveFileUrl: "",
+    convertedSheetId: "",
     remarks: "",
   });
   useEffect(() => {
     setForm((current) => ({
       ...current,
-      program: current.program || data.masterData.programs[0]?.name || "",
-      office: current.office || data.masterData.offices[0] || "",
+      program: current.program || "Auto-detect from workbook",
+      office: current.office || "Auto-detect from workbook",
       templateCode: current.templateCode || data.bulkTemplates[0]?.code || "",
     }));
   }, [data.masterData.programs, data.masterData.offices, data.bulkTemplates]);
@@ -237,18 +239,20 @@ function BulkSubmission({ data, onSubmit }) {
 
   return (
     <section className="content-stack">
-      <Panel title="Bulk Excel File Submission" icon={UploadCloud} action={<button className="primary" onClick={() => onSubmit({ ...form, sourceFile: form.fileName || "No file selected" })}><UploadCloud size={16} /> Register Submission</button>}>
+      <Panel title="Bulk Excel File Submission" icon={UploadCloud} action={<button className="primary" onClick={() => onSubmit({ ...form, sourceFile: form.fileName || form.driveFileUrl || "No file selected", drive_file_id: form.driveFileUrl, converted_sheet_id: form.convertedSheetId })}><UploadCloud size={16} /> Register Submission</button>}>
         <div className="bulk-layout">
           <div className="bulk-form">
             <Input label="Fiscal year" value={form.fiscalYear} onChange={(v) => update("fiscalYear", v)} />
-            <Input label="Banner program" value={form.program} onChange={(v) => update("program", v)} options={data.masterData.programs.map((program) => program.name)} />
-            <Input label="Submitting office" value={form.office} onChange={(v) => update("office", v)} options={data.masterData.offices} />
+            <Input label="Banner program" value={form.program} onChange={(v) => update("program", v)} options={["Auto-detect from workbook", ...data.masterData.programs.map((program) => program.name)]} />
+            <Input label="Submitting office" value={form.office} onChange={(v) => update("office", v)} options={["Auto-detect from workbook", ...data.masterData.offices]} />
             <Input label="Template profile" value={form.templateCode} onChange={(v) => update("templateCode", v)} options={data.bulkTemplates.map((row) => row.code)} />
             <Input label="Phase" value={form.phase} onChange={(v) => update("phase", v)} options={["Proposal", "DA Internal Review", "DBM Submission", "NEP", "GAA", "BED", "Implementation", "Monitoring"]} />
             <label className="field">
               <span>Excel workbook</span>
               <input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => update("fileName", event.target.files?.[0]?.name || "")} />
             </label>
+            <Input label="Original Drive file URL or ID" value={form.driveFileUrl} onChange={(v) => update("driveFileUrl", v)} wide />
+            <Input label="Converted Google Sheet URL or ID" value={form.convertedSheetId} onChange={(v) => update("convertedSheetId", v)} wide />
             <TextArea label="Submission remarks" value={form.remarks} onChange={(v) => update("remarks", v)} />
           </div>
           <div className="template-card">
@@ -720,10 +724,16 @@ function Help() {
 }
 
 function buildPreflightRows(template, form, data) {
-  const hasKnownProgram = data.masterData.programs.some((program) => program.name === form.program);
+  const autoProgram = form.program === "Auto-detect from workbook";
+  const autoOffice = form.office === "Auto-detect from workbook";
+  const hasKnownProgram = autoProgram || data.masterData.programs.some((program) => program.name === form.program);
+  const allowsMultiProgram = template.allowsMultiplePrograms || template.allow_multiple_programs === true || template.allow_multiple_programs === "TRUE";
+  const allowsMultiOffice = template.allowsMultipleOffices || template.allow_multiple_offices === true || template.allow_multiple_offices === "TRUE";
   return [
     { check: "File selected", result: form.fileName ? "Validated" : "Needs Correction", notes: form.fileName || "Select an Excel workbook from the banner program." },
-    { check: "Recognized program", result: hasKnownProgram ? "Validated" : "Needs Correction", notes: form.program ? `${form.program} must match the program master list.` : "Select a banner program from the production master list." },
+    { check: "Converted Google Sheet", result: form.convertedSheetId ? "Validated" : "Needs Correction", notes: form.convertedSheetId ? "Apps Script can use this converted_sheet_id for row extraction." : "Upload the Excel file to Drive, open/convert it as Google Sheets, then paste the converted Sheet URL or ID." },
+    { check: "Program scope", result: hasKnownProgram && (!autoProgram || allowsMultiProgram) ? "Validated" : "Needs Correction", notes: autoProgram ? "Program will be detected from DA operating unit/agency and commodity columns per row." : `${form.program} must match the program master list.` },
+    { check: "Office scope", result: !autoOffice || allowsMultiOffice ? "Validated" : "Needs Correction", notes: autoOffice ? "Submitting office will be detected from the DA Operating Unit / Agency column per row." : `${form.office} is the submitting office for this upload.` },
     { check: "Required sheets", result: "Preflight Review", notes: template.expectedSheets.join(", ") },
     { check: "Required columns", result: "Preflight Review", notes: template.requiredColumns.join(", ") },
     { check: "Master-list matching", result: "Preflight Review", notes: "Municipality, district, PAP, UACS, indicator, unit, object code, expense class, climate, and GEDSI values will be matched before import." },

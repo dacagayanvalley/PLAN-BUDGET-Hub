@@ -1,1 +1,1 @@
-id,code,name,description,expectedSheets,requiredColumns,mapping_json,importMode,sourceBasis,active,created_at,updated_at,created_by,updated_by
+id,code,name,description,expectedSheets,requiredColumns,mapping_json,importMode,sourceBasis,allow_multiple_programs,allow_multiple_offices,program_detection,active,created_at,updated_at,created_by,updated_by

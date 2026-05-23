@@ -20,6 +20,7 @@ The validation engine is implemented in `app/src/utils/validation.js`.
 | Rule | Description | Source basis |
 |---|---|---|
 | Template profile match | Uploaded workbook must be assigned to a registered bulk import template such as `BULK-COMMODITY`, `BULK-FMR`, or `BULK-BED-CAPTURE`. | District proposal workbooks, FMR sheets, BED capture files |
+| Multi-program workbook scope | Regional workbooks such as `BULK-RFO2-SPATIAL` may use `Auto-detect from workbook` for banner program and submitting office when each row contains DA operating unit/agency and commodity/industry fields. | `RFO2_Spatial_Details_of_FY_2027_Budget_FINAL.xlsx` |
 | Expected sheet check | Workbook must include at least one expected sheet for the selected template profile. | Commodity banner worksheets and BED capture sheets |
 | Required column check | Required columns must be present before row extraction. | `PROGRAM/SUBPROGRAM/ INDICATORS`, `UNIT OF MEASURE`, `FY 2027 PROPOSAL`, municipality remarks, FMR project fields, BED financial/physical fields |
 | Master-list matching | Program, PAP, UACS, municipality, district, commodity, indicator, unit, object code, expense class, climate tag, and GEDSI/GAD tag must match configured master data. | Prevents free-text drift from Excel workbooks |

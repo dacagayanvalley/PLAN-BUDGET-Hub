@@ -190,5 +190,7 @@ function normalizeBulkTemplates(rows = []) {
     requiredColumns: Array.isArray(row.requiredColumns)
       ? row.requiredColumns
       : String(row.requiredColumns || row.required_columns || "").split(";").map((item) => item.trim()).filter(Boolean),
+    allowsMultiplePrograms: row.allowsMultiplePrograms === true || row.allow_multiple_programs === true || row.allow_multiple_programs === "TRUE",
+    allowsMultipleOffices: row.allowsMultipleOffices === true || row.allow_multiple_offices === true || row.allow_multiple_offices === "TRUE",
   }));
 }

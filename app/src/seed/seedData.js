@@ -219,6 +219,18 @@ export const seedData = {
   ],
   bulkTemplates: [
     {
+      code: "BULK-RFO2-SPATIAL",
+      name: "RFO2 spatial budget forum workbook",
+      description: "Imports regional spatial targeting rows where multiple banner programs and multiple DA operating units/offices are mixed in one workbook.",
+      expectedSheets: ["BY INTERVENTION", "BY COMMODITY or INDUSTRY"],
+      requiredColumns: ["Region", "Province", "City/ Municipality", "DA Operating Unit / Agency with Corresponding FY 2027 Proposal"],
+      importMode: "Google Drive upload, convert to Google Sheets, detect program and office per row, stage intervention/commodity rows for review",
+      sourceBasis: "C:/Users/Jeff Factora/Downloads/2027/PIP/RFO2 Budget Forum/RFO2_Spatial_Details_of_FY_2027_Budget_FINAL.xlsx",
+      allowsMultiplePrograms: true,
+      allowsMultipleOffices: true,
+      programDetection: "Use DA Operating Unit / Agency and Inferred Commodity/Industry columns",
+    },
+    {
       code: "BULK-COMMODITY",
       name: "Commodity banner program proposal workbook",
       description: "Imports intervention or proposal rows from Rice, Corn, HVCDP, NUPAP, Livestock, OAP, Halal, NSHP, and similar banner sheets.",

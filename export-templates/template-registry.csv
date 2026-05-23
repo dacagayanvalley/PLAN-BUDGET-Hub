@@ -9,3 +9,4 @@ BULK-COMMODITY,Commodity banner program upload,Proposal,source-files/sample-exce
 BULK-FMR,FMR infrastructure upload,Proposal,source-files/sample-excel-files/* District * 2027*.xlsx,xlsx import
 BULK-BED-CAPTURE,BED financial and physical capture upload,BED,source-files/GAA-BED-forms/CORN BED 2.xlsx,xlsx import
 BULK-EXCEPTION,Bulk submission validation exception report,Reporting,Generated from bulk_submission_rows,csv/xlsx
+BULK-RFO2-SPATIAL,RFO2 spatial budget forum workbook,Proposal,C:\Users\Jeff Factora\Downloads\2027\PIP\RFO2 Budget Forum\RFO2_Spatial_Details_of_FY_2027_Budget_FINAL.xlsx,xlsx import
