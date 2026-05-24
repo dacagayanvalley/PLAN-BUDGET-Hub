@@ -108,7 +108,7 @@ export class ConvexRepository {
         user: import.meta.env.VITE_CURRENT_USER || "Planning Officer",
         role: import.meta.env.VITE_CURRENT_ROLE || "Planning Officer",
       },
-      users: [
+      users: masterData.users?.length ? masterData.users : [
         { name: "System Administrator", role: "Admin", office: "Planning, Monitoring and Evaluation Division" },
         { name: "Planning Officer", role: "Planning Officer", office: "Planning, Monitoring and Evaluation Division" },
         { name: "Program Officer", role: "Program Officer", office: "Banner Program" },
