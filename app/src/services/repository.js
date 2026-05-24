@@ -345,6 +345,7 @@ function toConvexProposal(proposal) {
     schedule: proposal.schedule || "",
     remarks: proposal.remarks || "",
     phase: proposal.phase || "Proposal",
+    validationStatus: proposal.validationStatus || "Draft",
     budgetLines: proposal.budgetLines || [],
     physicalTargets: proposal.physicalTargets || [],
   };

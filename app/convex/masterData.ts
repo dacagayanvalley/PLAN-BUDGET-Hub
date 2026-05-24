@@ -3,6 +3,21 @@ import { v } from "convex/values";
 import { QueryCtx, mutation, query } from "./_generated/server";
 import { editableRoles, publicUser, requireRole, requireUser } from "./authHelpers";
 
+const requiredDistricts = [
+  "Batanes Lone District",
+  "Cagayan 1st District",
+  "Cagayan 2nd District",
+  "Cagayan 3rd District",
+  "Isabela 1st District",
+  "Isabela 2nd District",
+  "Isabela 3rd District",
+  "Isabela 4th District",
+  "Isabela 5th District",
+  "Isabela 6th District",
+  "Nueva Vizcaya Lone District",
+  "Quirino Lone District",
+];
+
 export const listCore = query({
   args: { sessionToken: v.string() },
   handler: async (ctx, args) => {
@@ -39,7 +54,7 @@ export const listCore = query({
 
     return {
       provinces: [...new Set(municipalities.map((row) => row.province).filter(Boolean))].sort(),
-      districts: [...new Set(municipalities.map((row) => row.district).filter(Boolean))].sort(),
+      districts: [...new Set([...requiredDistricts, ...municipalities.map((row) => row.district).filter(Boolean)])].sort(),
       municipalities,
       interventionTypes,
       offices,

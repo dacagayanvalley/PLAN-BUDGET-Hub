@@ -211,7 +211,7 @@ export const registerBulkSubmission = mutation({
     sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
-    const session = await requireRole(ctx, args.sessionToken, editableRoles);
+    const session = await requireRole(ctx, args.sessionToken, ["Admin", "Planning Officer", "Program Officer"]);
     const actor = session.publicUser.name;
     const now = Date.now();
     const existing = await ctx.db.query("bulkSubmissions").withIndex("by_submissionId", (q) => q.eq("submissionId", args.submissionId)).first();

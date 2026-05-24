@@ -64,12 +64,12 @@ const accessProfiles = {
   },
   "Program Officer": {
     label: "Program Officer",
-    rights: ["View assigned program records", "Review validation status", "Read-only supporting details"],
-    allowedNav: ["dashboard", "review", "validation", "consolidation", "repository", "help"],
+    rights: ["Encode assigned office records", "Set Draft, Needs Correction, and Validated status", "Review supporting details"],
+    allowedNav: ["dashboard", "intake", "review", "bulk", "validation", "consolidation", "repository", "help"],
     canViewDashboard: true,
     canViewRecords: true,
-    canEncode: false,
-    canValidate: false,
+    canEncode: true,
+    canValidate: true,
     canAdvance: false,
     canReport: false,
     canManageMasterData: false,
@@ -190,7 +190,8 @@ function App() {
   const [saveNotice, setSaveNotice] = useState("");
   const [passwordResetRequests, setPasswordResetRequests] = useState([]);
   const isAuthenticated = Boolean(currentUser && (dataMode !== "convex" || sessionToken));
-  const access = currentUser ? (accessProfiles[normalizeAccessRole(currentUser.role)] || accessProfiles["Read-only Viewer"]) : activeAccess(data);
+  const baseAccess = currentUser ? (accessProfiles[normalizeAccessRole(currentUser.role)] || accessProfiles["Read-only Viewer"]) : activeAccess(data);
+  const access = currentUser && baseAccess.label === "Planning Officer" && !canSessionApprove(currentUser) ? { ...baseAccess, canAdvance: false } : baseAccess;
   const visibleNavItems = useMemo(() => navItems.filter((item) => canAccessNav(item, access)), [access]);
   const setActive = (id) => {
     const target = visibleNavItems.some((item) => item.id === id) ? id : visibleNavItems[0]?.id || "dashboard";
@@ -344,7 +345,7 @@ function App() {
       created_by: normalized.created_by || data.session.user,
     };
     const result = validateProposal(next, data);
-    next.validationStatus = result.issues.length ? "Needs Correction" : "Validated";
+    next.validationStatus = resolveClientValidationStatus(next.validationStatus, result.issues, access, data.session);
     if (["google", "convex"].includes(dataMode)) {
       repo.saveProposalAsync(next, data.session.user, sessionToken)
         .then(() => {
@@ -961,7 +962,7 @@ function ProposalIntake({ data, access, proposal, proposals, onSelect, onNew, on
         />
       </Panel>
       <Panel title={proposal ? "Encode / Edit Proposal" : "Create New Proposal"} icon={PenLine} action={access.canEncode && <button className="primary" onClick={() => onSave(draft)}><CheckCircle2 size={16} /> Validate and Save</button>}>
-        <ProposalEditorFields data={data} draft={draft} setDraft={setDraft} readOnly={!access.canEncode} />
+        <ProposalEditorFields data={data} access={access} draft={draft} setDraft={setDraft} readOnly={!access.canEncode} />
         <IssueList issues={issues} />
       </Panel>
     </section>
@@ -1067,7 +1068,7 @@ function RecordReview({ data, access, initialSelectedId, onSave }) {
                 <span>Updated by {draft.updated_by || draft.created_by || "unrecorded user"}</span>
                 <span>{formatDateTime(draft.updated_at || draft.created_at)}</span>
               </div>
-              <ProposalEditorFields data={data} draft={draft} setDraft={setDraft} readOnly={!access.canValidate} />
+              <ProposalEditorFields data={data} access={access} draft={draft} setDraft={setDraft} readOnly={!access.canValidate} />
               <IssueList issues={issues} />
             </>
           ) : draft ? (
@@ -1111,7 +1112,7 @@ function formatDateTime(value) {
   return date.toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
 }
 
-function ProposalEditorFields({ data, draft, setDraft, readOnly = false }) {
+function ProposalEditorFields({ data, access, draft, setDraft, readOnly = false }) {
   const update = (field, value) => setDraft((current) => {
     if (readOnly) return current;
     if (field === "interventionType") return applyInterventionSelection(current, value, data);
@@ -1159,6 +1160,7 @@ function ProposalEditorFields({ data, draft, setDraft, readOnly = false }) {
         <Input label="Climate tag" value={draft.climateTag} onChange={(v) => update("climateTag", v)} options={data.masterData.climateTags} />
         <Input label="GEDSI tag" value={draft.gedsiTag} onChange={(v) => update("gedsiTag", v)} options={data.masterData.gedsiTags} />
         <Input label="Implementation schedule" value={draft.schedule} onChange={(v) => update("schedule", v)} />
+        <Input label="Validation status" value={draft.validationStatus || "Draft"} onChange={(v) => update("validationStatus", v)} options={validationStatusOptions(access, data.session)} />
         <Input label="Source of proposal" value={draft.source} onChange={(v) => update("source", v)} options={["RFO consultation", "Congressional request", "RDC", "PIP/TRIP", "Program workshop", "Bulk Excel submission"]} />
         <TextArea label="Justification" value={draft.justification} onChange={(v) => update("justification", v)} />
         <TextArea label="Expected outcome" value={draft.expectedOutcome} onChange={(v) => update("expectedOutcome", v)} options={expectedOutcomeOptions} />
@@ -1188,6 +1190,28 @@ function ProposalEditorFields({ data, draft, setDraft, readOnly = false }) {
       </div>
     </>
   );
+}
+
+function validationStatusOptions(access, session) {
+  if (access?.label === "Admin") return ["Needs Correction", "Validated", "Approved"];
+  if (access?.label === "Planning Officer") {
+    return canSessionApprove(session) ? ["Needs Correction", "Validated", "Approved"] : ["Needs Correction", "Validated"];
+  }
+  if (access?.label === "Program Officer") return ["Draft", "Needs Correction", "Validated"];
+  return [];
+}
+
+function resolveClientValidationStatus(requestedStatus, issues, access, session) {
+  const allowed = validationStatusOptions(access, session);
+  const computed = issues.length ? "Needs Correction" : (access?.label === "Program Officer" ? "Draft" : "Validated");
+  if (allowed.includes(requestedStatus)) return requestedStatus;
+  if (allowed.includes(computed)) return computed;
+  return issues.length ? "Needs Correction" : "Validated";
+}
+
+function canSessionApprove(session) {
+  const office = String(session?.office || "").toLowerCase();
+  return office.includes("pmed") || office.includes("pips");
 }
 
 function Input({ label, value, onChange, type = "text", options, wide, disabled = false }) {
@@ -1278,6 +1302,16 @@ function municipalityDistrict(row) {
   return row.district || row.congressional_district || row.district_name || row.district_id || "";
 }
 
+function inferDistrictProvince(district) {
+  const value = String(district || "");
+  if (value.includes("Batanes")) return "Batanes";
+  if (value.includes("Cagayan")) return "Cagayan";
+  if (value.includes("Isabela")) return "Isabela";
+  if (value.includes("Nueva Vizcaya")) return "Nueva Vizcaya";
+  if (value.includes("Quirino")) return "Quirino";
+  return "";
+}
+
 function normalizeDraftProposal(proposal) {
   const title = [proposal.interventionType, proposal.commodity, proposal.municipality]
     .filter(Boolean)
@@ -1292,17 +1326,117 @@ function normalizeDraftProposal(proposal) {
 }
 
 function MasterData({ data, access, dataMode, repo, sessionToken, passwordResetRequests = [], onPasswordReset, onError }) {
-  const sets = [
-    ["Municipality-district map", data.masterData.municipalities],
-    ["Major Final Outputs / OPIF services", data.masterData.mfos],
-    ["Programs and PAPs", data.masterData.programs],
-    ["Indicators", data.masterData.indicators],
-    ["Units of measure", data.masterData.unitsOfMeasure.map((name) => ({ name }))],
-    ["Template registry", data.templates],
-    ["Bulk import templates", data.bulkTemplates],
+  const masterSections = [
+    {
+      title: "Municipality and District Map",
+      icon: MapPinned,
+      rows: data.masterData.municipalities.map((row) => ({
+        id: row._id || row.psgc || row.name,
+        name: municipalityName(row),
+        province: municipalityProvince(row),
+        district: municipalityDistrict(row),
+        psgc: row.psgc || "",
+      })),
+      columns: [["name", "Municipality"], ["province", "Province"], ["district", "Congressional District"], ["psgc", "PSGC"]],
+    },
+    {
+      title: "Congressional Districts",
+      icon: MapPinned,
+      rows: data.masterData.districts.map((district) => ({
+        id: district,
+        district,
+        province: inferDistrictProvince(district),
+      })),
+      columns: [["district", "Congressional District"], ["province", "Province"]],
+    },
+    {
+      title: "Major Final Outputs / PAP Services",
+      icon: Layers3,
+      rows: data.masterData.mfos.map((row) => ({
+        id: row.code || row.name,
+        code: row.code || "",
+        name: row.name,
+        parent: row.parent_mfo || row.parent || "",
+      })),
+      columns: [["code", "Code"], ["name", "MFO / PAP Service"], ["parent", "Parent MFO"]],
+    },
+    {
+      title: "Programs and PAPs",
+      icon: ClipboardList,
+      rows: data.masterData.programs.map((program) => ({
+        id: program.name,
+        name: program.name,
+        uacs: program.uacs || "",
+        paps: Array.isArray(program.paps) ? program.paps.join("; ") : "",
+      })),
+      columns: [["name", "Program"], ["uacs", "UACS"], ["paps", "Linked PAPs"]],
+    },
+    {
+      title: "Intervention Types",
+      icon: Settings,
+      rows: data.masterData.interventionTypes.map((row) => ({
+        id: row.code || row.name,
+        name: row.name,
+        program: row.program || "",
+        mfo: row.mfo || "",
+        defaultIndicator: row.defaultIndicator || row.source_indicator || "",
+        defaultUnit: row.defaultUnit || "",
+      })),
+      columns: [["name", "Intervention"], ["program", "Program"], ["mfo", "MFO"], ["defaultIndicator", "Default Indicator"], ["defaultUnit", "Unit"]],
+    },
+    {
+      title: "Indicators",
+      icon: ListChecks,
+      rows: data.masterData.indicators.map((row) => ({
+        id: row.name,
+        name: row.name,
+        unit: row.unit || "",
+        mfo: row.mfo || "",
+        pi_level: row.pi_level || "",
+      })),
+      columns: [["name", "Indicator"], ["unit", "Unit"], ["mfo", "MFO"], ["pi_level", "Level"]],
+    },
+    {
+      title: "Reference Tags and Expense Classes",
+      icon: Database,
+      rows: [
+        ...data.masterData.unitsOfMeasure.map((name) => ({ id: `unit-${name}`, type: "Unit of Measure", name })),
+        ...data.masterData.objectCodes.map((name) => ({ id: `object-${name}`, type: "Object Code", name })),
+        ...data.masterData.expenseClasses.map((name) => ({ id: `expense-${name}`, type: "Expense Class", name })),
+        ...data.masterData.climateTags.map((name) => ({ id: `climate-${name}`, type: "Climate Tag", name })),
+        ...data.masterData.gedsiTags.map((name) => ({ id: `gedsi-${name}`, type: "GEDSI Tag", name })),
+        ...data.masterData.commodities.map((name) => ({ id: `commodity-${name}`, type: "Commodity", name })),
+      ],
+      columns: [["type", "Reference Type"], ["name", "Value"]],
+    },
+    {
+      title: "Report Templates",
+      icon: FileSpreadsheet,
+      rows: data.templates.map((row) => ({ id: row.code || row.name, ...row })),
+      columns: [["code", "Code"], ["name", "Template"], ["phase", "Phase"], ["outputFormat", "Output"]],
+    },
+    {
+      title: "Bulk Import Templates",
+      icon: UploadCloud,
+      rows: data.bulkTemplates.map((row) => ({
+        id: row.code || row.name,
+        code: row.code || "",
+        name: row.name || "",
+        sourceBasis: row.sourceBasis || "",
+        expectedSheets: Array.isArray(row.expectedSheets) ? row.expectedSheets.join(", ") : "",
+        importMode: row.importMode || "",
+      })),
+      columns: [["code", "Code"], ["name", "Template"], ["sourceBasis", "Source Basis"], ["expectedSheets", "Expected Sheets"], ["importMode", "Import Mode"]],
+    },
   ];
   return (
     <section className="content-stack">
+      <div className="master-summary-grid">
+        <Kpi label="Users" value={data.users.length} icon={Users} />
+        <Kpi label="Municipalities" value={data.masterData.municipalities.length} icon={MapPinned} />
+        <Kpi label="Districts" value={data.masterData.districts.length} icon={MapPinned} />
+        <Kpi label="Programs" value={data.masterData.programs.length} icon={ClipboardList} />
+      </div>
       <UserPasswordAdmin
         users={data.users}
         offices={data.masterData.offices}
@@ -1313,12 +1447,30 @@ function MasterData({ data, access, dataMode, repo, sessionToken, passwordResetR
         onPasswordReset={onPasswordReset}
         onError={onError}
       />
-      {sets.map(([title, rows]) => (
-        <Panel key={title} title={title} icon={Settings} action={access?.canManageMasterData && <button className="ghost"><Plus size={16} /> Add</button>}>
-          <pre className="json-card">{JSON.stringify(rows, null, 2)}</pre>
-        </Panel>
+      {masterSections.map((section) => (
+        <MasterDataTable key={section.title} {...section} />
       ))}
     </section>
+  );
+}
+
+function MasterDataTable({ title, icon, rows, columns }) {
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  const filteredRows = useMemo(() => {
+    if (!needle) return rows;
+    return rows.filter((row) => Object.values(row).some((value) => String(value || "").toLowerCase().includes(needle)));
+  }, [needle, rows]);
+  return (
+    <Panel title={title} icon={icon}>
+      <div className="master-table-toolbar">
+        <label className="field compact master-search">
+          <span>Search</span>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Find ${title.toLowerCase()}`} />
+        </label>
+      </div>
+      <DataTable rows={filteredRows} columns={columns} />
+    </Panel>
   );
 }
 

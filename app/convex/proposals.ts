@@ -51,6 +51,7 @@ const proposalFields = {
   schedule: v.optional(v.string()),
   remarks: v.optional(v.string()),
   phase: v.optional(v.string()),
+  validationStatus: v.optional(v.string()),
   budgetLines: v.optional(v.array(budgetLine)),
   physicalTargets: v.optional(v.array(physicalTarget)),
 };
@@ -156,10 +157,13 @@ export const upsert = mutation({
     sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
-    const session = await requireRole(ctx, args.sessionToken, editableRoles);
+    const session = await requireRole(ctx, args.sessionToken, ["Admin", "Planning Officer", "Program Officer"]);
     const actor = session.publicUser.name;
     const now = Date.now();
     const existing = await ctx.db.query("proposals").withIndex("by_proposalId", (q) => q.eq("proposalId", args.proposal.proposalId)).first();
+    if (session.role === "Program Officer" && normalizeKey(session.publicUser.office) !== normalizeKey(args.proposal.office)) {
+      throw new Error("Program Officer accounts can only edit records assigned to their own office.");
+    }
     const issues = await validateProposalInput(ctx, {
       ...args.proposal,
       nepAmount: args.proposal.nepAmount || 0,
@@ -167,7 +171,8 @@ export const upsert = mutation({
       budgetLines: args.proposal.budgetLines || [],
       physicalTargets: args.proposal.physicalTargets || [],
     });
-    const validationStatus = issues.length ? "Needs Correction" : "Validated";
+    const computedStatus = issues.length ? "Needs Correction" : "Validated";
+    const validationStatus = resolveValidationStatus(session.role, session.publicUser.office, args.proposal.validationStatus, computedStatus);
     const normalized = {
       ...args.proposal,
       title: args.proposal.title || buildTitle(args.proposal),
@@ -222,6 +227,36 @@ export const upsert = mutation({
   },
 });
 
+function resolveValidationStatus(role: string, office: string | undefined, requestedStatus: string | undefined, computedStatus: string) {
+  const requested = requestedStatus || computedStatus;
+  const allowedByRole: Record<string, string[]> = {
+    Admin: ["Needs Correction", "Validated", "Approved"],
+    "Planning Officer": canApprove(role, office) ? ["Needs Correction", "Validated", "Approved"] : ["Needs Correction", "Validated"],
+    "Program Officer": ["Draft", "Needs Correction", "Validated"],
+  };
+  const allowed = allowedByRole[role] || [];
+  if (!allowed.includes(requested)) {
+    throw new Error(`${role} cannot set validation status to ${requested}.`);
+  }
+  if (requested === "Approved" && computedStatus === "Needs Correction") {
+    throw new Error("Records with validation issues cannot be approved.");
+  }
+  if (requested === "Validated" && computedStatus === "Needs Correction") {
+    throw new Error("Records with validation issues cannot be marked Validated.");
+  }
+  return requested;
+}
+
+function normalizeKey(value: unknown) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function canApprove(role: string, office: string | undefined) {
+  if (role === "Admin") return true;
+  const officeKey = normalizeKey(office);
+  return role === "Planning Officer" && (officeKey.includes("pmed") || officeKey.includes("pips"));
+}
+
 export const advancePhase = mutation({
   args: {
     proposalId: v.string(),
@@ -231,6 +266,9 @@ export const advancePhase = mutation({
   },
   handler: async (ctx, args) => {
     const session = await requireRole(ctx, args.sessionToken, editableRoles);
+    if (!canApprove(session.role, session.publicUser.office)) {
+      throw new Error("Only Admin and PMED/PIPS officers can advance records across phases.");
+    }
     const actor = session.publicUser.name;
     const now = Date.now();
     const proposal = await ctx.db.query("proposals").withIndex("by_proposalId", (q) => q.eq("proposalId", args.proposalId)).first();
