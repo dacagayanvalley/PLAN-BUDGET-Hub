@@ -18,6 +18,7 @@ export const listCore = query({
       climateTags,
       gedsiTags,
       mfos,
+      users,
     ] = await Promise.all([
       ctx.db.query("municipalities").collect(),
       ctx.db.query("interventionTypes").collect(),
@@ -31,6 +32,7 @@ export const listCore = query({
       listMasterNames(ctx, "climate_tag"),
       listMasterNames(ctx, "gedsi_tag"),
       listMasterObjects(ctx, "mfo"),
+      ctx.db.query("users").collect(),
     ]);
 
     return {
@@ -48,6 +50,7 @@ export const listCore = query({
       climateTags,
       gedsiTags,
       mfos,
+      users,
     };
   },
 });
