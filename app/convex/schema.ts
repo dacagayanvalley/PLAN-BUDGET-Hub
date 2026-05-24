@@ -23,6 +23,17 @@ const physicalTarget = v.object({
 });
 
 export default defineSchema({
+  users: defineTable({
+    name: v.string(),
+    email: v.optional(v.string()),
+    role: v.string(),
+    office: v.optional(v.string()),
+    status: v.string(),
+    ...auditFields,
+  })
+    .index("by_email", ["email"])
+    .index("by_role", ["role"]),
+
   proposals: defineTable({
     proposalId: v.string(),
     fiscalYear: v.string(),

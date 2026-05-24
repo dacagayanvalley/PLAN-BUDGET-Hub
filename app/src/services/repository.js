@@ -1,4 +1,6 @@
 import { seedData } from "../seed/seedData.js";
+import { ConvexHttpClient } from "convex/browser";
+import { anyApi } from "convex/server";
 
 export const emptyData = {
   session: {
@@ -32,10 +34,11 @@ export const emptyData = {
 };
 
 export function getDataMode() {
-  return import.meta.env.VITE_DATA_MODE || (import.meta.env.PROD ? "google" : "empty");
+  return import.meta.env.VITE_DATA_MODE || (import.meta.env.PROD ? "convex" : "empty");
 }
 
 export function createRepository(mode = getDataMode()) {
+  if (mode === "convex") return new ConvexRepository();
   if (mode === "google") return new GoogleSheetsRepository();
   if (mode === "demo") return new MockRepository();
   return new EmptyRepository();
@@ -58,6 +61,80 @@ class EmptyRepository {
 class MockRepository {
   loadAll() {
     return structuredClone(seedData);
+  }
+
+  saveProposal(current, proposal) {
+    const exists = current.proposals.some((row) => row.id === proposal.id);
+    const proposals = exists
+      ? current.proposals.map((row) => (row.id === proposal.id ? proposal : row))
+      : [...current.proposals, proposal];
+    return { ...current, proposals };
+  }
+}
+
+export class ConvexRepository {
+  constructor({ url = import.meta.env.VITE_CONVEX_URL } = {}) {
+    this.url = url;
+    this.client = url ? new ConvexHttpClient(url) : null;
+  }
+
+  assertClient() {
+    if (!this.client) {
+      throw new Error("VITE_CONVEX_URL is required for Convex mode.");
+    }
+    return this.client;
+  }
+
+  loadAll() {
+    return structuredClone(emptyData);
+  }
+
+  async loadAllAsync({ fiscalYear = "2027" } = {}) {
+    const client = this.assertClient();
+    const [masterData, proposalsPage, phaseHistory, bulkSubmissions, attachments] = await Promise.all([
+      client.query(anyApi.masterData.listCore, {}),
+      client.query(anyApi.proposals.listPage, {
+        fiscalYear,
+        paginationOpts: { numItems: 1000, cursor: null },
+      }),
+      client.query(anyApi.proposals.listPhaseHistory, { fiscalYear }),
+      client.query(anyApi.proposals.listBulkSubmissions, { fiscalYear }),
+      client.query(anyApi.proposals.listAttachments, { fiscalYear }),
+    ]);
+    const proposals = (proposalsPage?.page || []).map(fromConvexProposal);
+    return {
+      ...structuredClone(emptyData),
+      session: {
+        user: import.meta.env.VITE_CURRENT_USER || "Planning Officer",
+        role: import.meta.env.VITE_CURRENT_ROLE || "Planning Officer",
+      },
+      users: [
+        { name: "System Administrator", role: "Admin", office: "Planning, Monitoring and Evaluation Division" },
+        { name: "Planning Officer", role: "Planning Officer", office: "Planning, Monitoring and Evaluation Division" },
+        { name: "Program Officer", role: "Program Officer", office: "Banner Program" },
+        { name: "Management", role: "Management", office: "Regional Management" },
+      ],
+      masterData: normalizeConvexMasterData(masterData),
+      proposals,
+      phaseHistory: (phaseHistory || []).map(fromConvexPhaseHistory),
+      bulkSubmissions: (bulkSubmissions || []).map(fromConvexBulkSubmission),
+      attachments: (attachments || []).map(fromConvexAttachment),
+      templates: [
+        { code: "PBP", name: "Plan and Budget Proposal Register", phase: "Proposal", outputFormat: "CSV/XLSX" },
+        { code: "NEP", name: "National Expenditure Program Matrix", phase: "NEP", outputFormat: "CSV/XLSX" },
+        { code: "GAA", name: "General Appropriations Act Matrix", phase: "GAA", outputFormat: "CSV/XLSX" },
+        { code: "MNE", name: "Monitoring and Evaluation Report", phase: "Monitoring and Evaluation", outputFormat: "CSV/XLSX" },
+      ],
+    };
+  }
+
+  async saveProposalAsync(proposal, actor = "Planning Officer") {
+    const payload = toConvexProposal(proposal);
+    return this.assertClient().mutation(anyApi.proposals.upsert, { proposal: payload, actor });
+  }
+
+  async advancePhaseAsync({ proposalId, toPhase, remarks, actor }) {
+    return this.assertClient().mutation(anyApi.proposals.advancePhase, { proposalId, toPhase, remarks, actor });
   }
 
   saveProposal(current, proposal) {
@@ -112,6 +189,101 @@ export class GoogleSheetsRepository {
   async registerBulkSubmissionAsync(submission) {
     return this.request("registerBulkSubmission", submission);
   }
+}
+
+function normalizeConvexMasterData(masterData = {}) {
+  const master = { ...emptyData.masterData, ...masterData };
+  return {
+    ...master,
+    provinces: normalizeNames(master.provinces),
+    districts: normalizeNames(master.districts),
+    offices: normalizeNames(master.offices),
+    mfos: normalizeMfos(master.mfos),
+    programs: normalizePrograms(master.programs, []),
+    commodities: normalizeNames(master.commodities),
+    interventionTypes: normalizeInterventionTypes(master.interventionTypes),
+    indicators: normalizeIndicators(master.indicators),
+    unitsOfMeasure: normalizeNames(master.unitsOfMeasure),
+    objectCodes: normalizeNames(master.objectCodes),
+    expenseClasses: normalizeNames(master.expenseClasses),
+    climateTags: normalizeNames(master.climateTags),
+    gedsiTags: normalizeNames(master.gedsiTags),
+    municipalities: normalizeMunicipalities(master.municipalities),
+  };
+}
+
+function fromConvexProposal(row) {
+  return {
+    ...row,
+    id: row.proposalId,
+    created_at: row.createdAt ? new Date(row.createdAt).toISOString() : "",
+    updated_at: row.updatedAt ? new Date(row.updatedAt).toISOString() : "",
+    created_by: row.createdBy || "",
+    updated_by: row.updatedBy || "",
+  };
+}
+
+function toConvexProposal(proposal) {
+  return {
+    proposalId: proposal.id || proposal.proposalId,
+    fiscalYear: String(proposal.fiscalYear || ""),
+    title: proposal.title || "",
+    description: proposal.description || "",
+    office: proposal.office || "",
+    program: proposal.program || "",
+    subprogram: proposal.subprogram || "",
+    mfo: proposal.mfo || "",
+    pap: proposal.pap || proposal.mfo || "",
+    uacs: proposal.uacs || "",
+    province: proposal.province || "",
+    municipality: proposal.municipality || "",
+    district: proposal.district || "",
+    commodity: proposal.commodity || "",
+    interventionType: proposal.interventionType || "",
+    beneficiaryGroup: proposal.beneficiaryGroup || "",
+    beneficiaries: Number(proposal.beneficiaries || 0),
+    budgetAmount: Number(proposal.budgetAmount || 0),
+    nepAmount: Number(proposal.nepAmount || 0),
+    gaaAmount: Number(proposal.gaaAmount || 0),
+    tier: proposal.tier || "",
+    source: proposal.source || "",
+    justification: proposal.justification || "",
+    expectedOutput: proposal.expectedOutput || "",
+    expectedOutcome: proposal.expectedOutcome || "",
+    readinessStatus: proposal.readinessStatus || "",
+    climateTag: proposal.climateTag || "",
+    climateRationale: proposal.climateRationale || "",
+    gedsiTag: proposal.gedsiTag || "",
+    schedule: proposal.schedule || "",
+    remarks: proposal.remarks || "",
+    phase: proposal.phase || "Proposal",
+    budgetLines: proposal.budgetLines || [],
+    physicalTargets: proposal.physicalTargets || [],
+  };
+}
+
+function fromConvexPhaseHistory(row) {
+  return {
+    ...row,
+    id: row._id,
+    date: row.date || (row.createdAt ? new Date(row.createdAt).toISOString().slice(0, 10) : ""),
+  };
+}
+
+function fromConvexBulkSubmission(row) {
+  return {
+    ...row,
+    id: row.submissionId,
+    submitted_by: row.createdBy || "",
+  };
+}
+
+function fromConvexAttachment(row) {
+  return {
+    ...row,
+    id: row._id,
+    uploaded_by: row.uploadedBy || row.createdBy || "",
+  };
 }
 
 export function normalizeGoogleData(data) {

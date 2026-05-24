@@ -34,6 +34,60 @@ import { createBlankProposal, findDuplicateBulkSubmission, validateProposal, val
 const dataMode = getDataMode();
 const repo = createRepository(dataMode);
 
+const lifecyclePhases = ["Proposal", "NEP", "GAA", "Implementation", "Monitoring and Evaluation"];
+
+const accessProfiles = {
+  Admin: {
+    label: "Admin",
+    rights: ["Full database access", "Master data management", "Validate and move PAPs across phases", "All dashboards and reports"],
+    canEncode: true,
+    canValidate: true,
+    canAdvance: true,
+    canReport: true,
+    canManageMasterData: true,
+  },
+  "Planning Officer": {
+    label: "Planning Officer",
+    rights: ["Encode PAP records", "Validate proposal, NEP, and GAA records", "Generate reporting templates"],
+    canEncode: true,
+    canValidate: true,
+    canAdvance: true,
+    canReport: true,
+    canManageMasterData: false,
+  },
+  "Program Officer": {
+    label: "Program Officer",
+    rights: ["Encode assigned program PAPs", "Upload supporting details", "Generate assigned reports"],
+    canEncode: true,
+    canValidate: false,
+    canAdvance: false,
+    canReport: true,
+    canManageMasterData: false,
+  },
+  Management: {
+    label: "Management",
+    rights: ["Dashboard access", "Management reports", "Read-only record view"],
+    canEncode: false,
+    canValidate: false,
+    canAdvance: false,
+    canReport: true,
+    canManageMasterData: false,
+  },
+  "Read-only Viewer": {
+    label: "Read-only Viewer",
+    rights: ["Read-only dashboards and generated reports"],
+    canEncode: false,
+    canValidate: false,
+    canAdvance: false,
+    canReport: true,
+    canManageMasterData: false,
+  },
+};
+
+function activeAccess(data) {
+  return accessProfiles[data.session?.role] || accessProfiles["Read-only Viewer"];
+}
+
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
   { id: "intake", label: "Proposal Intake", icon: PenLine },
@@ -74,7 +128,7 @@ const climateRationaleOptions = [
 function App() {
   const [active, setActiveState] = useState(() => window.location.hash.replace("#", "") || "dashboard");
   const [data, setData] = useState(() => repo.loadAll());
-  const [loadState, setLoadState] = useState({ status: dataMode === "google" ? "loading" : "ready", error: "" });
+  const [loadState, setLoadState] = useState({ status: ["google", "convex"].includes(dataMode) ? "loading" : "ready", error: "" });
   const [filters, setFilters] = useState({
     fiscalYear: "2027",
     program: "All",
@@ -89,9 +143,9 @@ function App() {
   };
 
   const reloadProductionData = () => {
-    if (dataMode !== "google") return undefined;
+    if (!["google", "convex"].includes(dataMode)) return undefined;
     setLoadState({ status: "loading", error: "" });
-    return repo.loadAllAsync()
+    return repo.loadAllAsync({ fiscalYear: filters.fiscalYear })
       .then((nextData) => {
         setData(nextData);
         setSelectedProposalId(nextData.proposals[0]?.id);
@@ -104,9 +158,9 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
-    if (dataMode !== "google") return undefined;
+    if (!["google", "convex"].includes(dataMode)) return undefined;
     setLoadState({ status: "loading", error: "" });
-    repo.loadAllAsync()
+    repo.loadAllAsync({ fiscalYear: filters.fiscalYear })
       .then((nextData) => {
         if (cancelled) return;
         setData(nextData);
@@ -120,7 +174,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [filters.fiscalYear]);
 
   const selectedProposal = selectedProposalId === "__new__" ? null : (data.proposals.find((proposal) => proposal.id === selectedProposalId) ?? data.proposals[0]);
   const validationResults = useMemo(() => validateAll(data), [data]);
@@ -147,8 +201,8 @@ function App() {
     };
     const result = validateProposal(next, data);
     next.validationStatus = result.issues.length ? "Needs Correction" : "Validated";
-    if (dataMode === "google") {
-      repo.saveProposalAsync(next)
+    if (["google", "convex"].includes(dataMode)) {
+      repo.saveProposalAsync(next, data.session.user)
         .then(() => {
           setData((current) => repo.saveProposal(current, next));
           setSelectedProposalId("__new__");
@@ -160,6 +214,40 @@ function App() {
       setSelectedProposalId("__new__");
       flashSaveNotice(setSaveNotice);
     }
+  };
+
+  const advanceProposalPhase = ({ proposal, toPhase, remarks }) => {
+    const next = {
+      ...proposal,
+      phase: toPhase,
+      updated_at: new Date().toISOString(),
+      updated_by: data.session.user,
+      validationStatus: toPhase === "Monitoring and Evaluation" ? "Approved" : proposal.validationStatus,
+    };
+    if (dataMode === "convex") {
+      repo.advancePhaseAsync({ proposalId: proposal.id, toPhase, remarks, actor: data.session.user })
+        .then(() => reloadProductionData())
+        .then(() => flashSaveNotice(setSaveNotice, `${proposal.id} moved to ${toPhase}.`))
+        .catch((error) => setLoadState({ status: "error", error: error.message }));
+      return;
+    }
+    setData((current) => ({
+      ...repo.saveProposal(current, next),
+      phaseHistory: [
+        ...(current.phaseHistory || []),
+        {
+          id: `PH-${Date.now()}`,
+          proposalId: proposal.id,
+          phase: toPhase,
+          date: new Date().toISOString().slice(0, 10),
+          budgetAmount: phaseAmount(next, toPhase),
+          physicalTarget: String((next.physicalTargets || []).reduce((sum, target) => sum + Number(target.target || 0), 0)),
+          editor: data.session.user,
+          remarks: remarks || `Advanced to ${toPhase}.`,
+        },
+      ],
+    }));
+    flashSaveNotice(setSaveNotice, `${proposal.id} moved to ${toPhase}.`);
   };
 
   const registerBulkSubmission = (submission) => {
@@ -242,12 +330,14 @@ function App() {
         <ProductionBanner dataMode={dataMode} loadState={loadState} />
         {saveNotice && <div className="toast good">{saveNotice}</div>}
         <Header data={data} filters={filters} setFilters={setFilters} onRefresh={reloadProductionData} loadState={loadState} />
+        <AccessBanner data={data} />
         {active === "dashboard" && (
           <Dashboard data={data} proposals={filteredProposals} validationResults={validationResults} />
         )}
         {active === "intake" && (
           <ProposalIntake
             data={data}
+            access={activeAccess(data)}
             proposal={selectedProposal}
             proposals={filteredProposals}
             onSelect={setSelectedProposalId}
@@ -255,7 +345,7 @@ function App() {
             onSave={upsertProposal}
           />
         )}
-        {active === "review" && <RecordReview data={data} initialSelectedId={selectedProposalId} onSave={upsertProposal} />}
+        {active === "review" && <RecordReview data={data} access={activeAccess(data)} initialSelectedId={selectedProposalId} onSave={upsertProposal} />}
         {active === "bulk" && <BulkSubmission data={data} onSubmit={registerBulkSubmission} />}
         {active === "master" && <MasterData data={data} />}
         {active === "validation" && (
@@ -269,7 +359,7 @@ function App() {
           />
         )}
         {active === "consolidation" && <Consolidation proposals={filteredProposals} />}
-        {active === "phases" && <PhaseTracking data={data} proposal={selectedProposal} />}
+        {active === "phases" && <PhaseTracking data={data} access={activeAccess(data)} proposal={selectedProposal} onAdvance={advanceProposalPhase} />}
         {active === "reports" && <Reports data={data} proposals={filteredProposals} />}
         {active === "repository" && <Repository data={data} proposal={selectedProposal} />}
         {active === "help" && <Help />}
@@ -377,18 +467,34 @@ function BulkSubmission({ data, onSubmit }) {
 
 function ProductionBanner({ dataMode, loadState }) {
   if (dataMode === "demo") {
-    return <div className="mode-banner warn">Demo mode is using sample training records. Set <code>VITE_DATA_MODE=google</code> for production.</div>;
+    return <div className="mode-banner warn">Demo mode is using sample training records. Set <code>VITE_DATA_MODE=convex</code> for production.</div>;
   }
   if (dataMode === "empty") {
-    return <div className="mode-banner">Empty local mode. Configure Google Apps Script and set <code>VITE_DATA_MODE=google</code> to use production data.</div>;
+    return <div className="mode-banner">Empty local mode. Set <code>VITE_DATA_MODE=convex</code> and <code>VITE_CONVEX_URL</code> to use the production database.</div>;
   }
   if (loadState.status === "loading") {
-    return <div className="mode-banner">Loading production records from Google Sheets...</div>;
+    return <div className="mode-banner">Loading production records from {dataMode === "convex" ? "Convex" : "Google Sheets"}...</div>;
   }
   if (loadState.status === "error") {
-    return <div className="mode-banner error">Google Sheets connection error: {loadState.error}</div>;
+    return <div className="mode-banner error">{dataMode === "convex" ? "Convex" : "Google Sheets"} connection error: {loadState.error}</div>;
   }
+  if (dataMode === "convex") return <div className="mode-banner good">Production mode connected to Convex.</div>;
   return <div className="mode-banner good">Production mode connected to Google Sheets.</div>;
+}
+
+function AccessBanner({ data }) {
+  const access = activeAccess(data);
+  return (
+    <div className="access-banner">
+      <div>
+        <strong>{access.label}</strong>
+        <span>{data.session?.user || "Current user"}</span>
+      </div>
+      <ul>
+        {access.rights.map((right) => <li key={right}>{right}</li>)}
+      </ul>
+    </div>
+  );
 }
 
 function Header({ data, filters, setFilters, onRefresh, loadState }) {
@@ -403,7 +509,7 @@ function Header({ data, filters, setFilters, onRefresh, loadState }) {
         <SelectFilter label="Program" value={filters.program} options={["All", ...data.masterData.programs.map((p) => p.name)]} onChange={(program) => setFilters((f) => ({ ...f, program }))} />
         <SelectFilter label="Province" value={filters.province} options={["All", ...data.masterData.provinces]} onChange={(province) => setFilters((f) => ({ ...f, province }))} />
         <SelectFilter label="Status" value={filters.status} options={["All", "Draft", "Needs Correction", "Validated", "Approved"]} onChange={(status) => setFilters((f) => ({ ...f, status }))} />
-        {dataMode === "google" && (
+        {["google", "convex"].includes(dataMode) && (
           <button className="ghost refresh-button" onClick={onRefresh} disabled={loadState.status === "loading"}>
             <RefreshCw size={16} />
             {loadState.status === "loading" ? "Refreshing" : "Refresh data"}
@@ -488,7 +594,7 @@ function Kpi({ label, value, icon: Icon, tone }) {
   );
 }
 
-function ProposalIntake({ data, proposal, proposals, onSelect, onNew, onSave }) {
+function ProposalIntake({ data, access, proposal, proposals, onSelect, onNew, onSave }) {
   const blankProposal = useMemo(() => createBlankProposal(data), [data]);
   const activeProposal = proposal || blankProposal;
   const [draft, setDraft] = useState(activeProposal);
@@ -504,7 +610,7 @@ function ProposalIntake({ data, proposal, proposals, onSelect, onNew, onSave }) 
 
   return (
     <section className="content-stack">
-      <Panel title="Proposal Register" icon={Search} action={<button className="primary" onClick={onNew}><Plus size={16} /> New Proposal</button>}>
+      <Panel title="Proposal Register" icon={Search} action={access.canEncode && <button className="primary" onClick={onNew}><Plus size={16} /> New Proposal</button>}>
         <DataTable
           rows={proposals}
           onRowClick={(row) => onSelect(row.id)}
@@ -521,15 +627,15 @@ function ProposalIntake({ data, proposal, proposals, onSelect, onNew, onSave }) 
           formatters={{ budgetAmount: formatPeso, validationStatus: (value) => <StatusBadge value={value} /> }}
         />
       </Panel>
-      <Panel title={proposal ? "Encode / Edit Proposal" : "Create New Proposal"} icon={PenLine} action={<button className="primary" onClick={() => onSave(draft)}><CheckCircle2 size={16} /> Validate and Save</button>}>
-        <ProposalEditorFields data={data} draft={draft} setDraft={setDraft} />
+      <Panel title={proposal ? "Encode / Edit Proposal" : "Create New Proposal"} icon={PenLine} action={access.canEncode && <button className="primary" onClick={() => onSave(draft)}><CheckCircle2 size={16} /> Validate and Save</button>}>
+        <ProposalEditorFields data={data} draft={draft} setDraft={setDraft} readOnly={!access.canEncode} />
         <IssueList issues={issues} />
       </Panel>
     </section>
   );
 }
 
-function RecordReview({ data, initialSelectedId, onSave }) {
+function RecordReview({ data, access, initialSelectedId, onSave }) {
   const [statusFilter, setStatusFilter] = useState("All");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(initialSelectedId || data.proposals[0]?.id || "");
@@ -618,7 +724,7 @@ function RecordReview({ data, initialSelectedId, onSave }) {
         <Panel
           title={draft ? `Edit and Validate ${draft.id}` : "Edit and Validate Record"}
           icon={PenLine}
-          action={draft && reviewMode && <button className="primary" onClick={() => onSave(draft)}><CheckCircle2 size={16} /> Validate and Save</button>}
+          action={draft && reviewMode && access.canValidate && <button className="primary" onClick={() => onSave(draft)}><CheckCircle2 size={16} /> Validate and Save</button>}
         >
           {draft && reviewMode ? (
             <>
@@ -628,7 +734,7 @@ function RecordReview({ data, initialSelectedId, onSave }) {
                 <span>Updated by {draft.updated_by || draft.created_by || "unrecorded user"}</span>
                 <span>{formatDateTime(draft.updated_at || draft.created_at)}</span>
               </div>
-              <ProposalEditorFields data={data} draft={draft} setDraft={setDraft} />
+              <ProposalEditorFields data={data} draft={draft} setDraft={setDraft} readOnly={!access.canValidate} />
               <IssueList issues={issues} />
             </>
           ) : draft ? (
@@ -672,20 +778,23 @@ function formatDateTime(value) {
   return date.toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
 }
 
-function ProposalEditorFields({ data, draft, setDraft }) {
+function ProposalEditorFields({ data, draft, setDraft, readOnly = false }) {
   const update = (field, value) => setDraft((current) => {
+    if (readOnly) return current;
     if (field === "interventionType") return applyInterventionSelection(current, value, data);
     if (field === "municipality") return applyMunicipalitySelection(current, value, data);
     if (field === "mfo") return { ...current, mfo: value, pap: value };
     return { ...current, [field]: value };
   });
   const updateBudget = (index, field, value) => {
+    if (readOnly) return;
     setDraft((current) => ({
       ...current,
       budgetLines: (current.budgetLines || []).map((line, i) => (i === index ? { ...line, [field]: field === "amount" ? Number(value) : value } : line)),
     }));
   };
   const updateTarget = (index, field, value) => {
+    if (readOnly) return;
     setDraft((current) => ({
       ...current,
       physicalTargets: (current.physicalTargets || []).map((line, i) => (i === index ? { ...line, [field]: field === "target" ? Number(value) : value } : line)),
@@ -694,7 +803,7 @@ function ProposalEditorFields({ data, draft, setDraft }) {
 
   return (
     <>
-      <div className="form-grid">
+      <fieldset className="form-grid" disabled={readOnly}>
         <Input label="Fiscal year" value={draft.fiscalYear} onChange={(v) => update("fiscalYear", v)} />
         <Input label="Intervention type" value={draft.interventionType} onChange={(v) => update("interventionType", v)} options={interventionOptions(data)} wide />
         <Input label="Implementing office" value={draft.office} onChange={(v) => update("office", v)} options={data.masterData.offices} />
@@ -709,6 +818,9 @@ function ProposalEditorFields({ data, draft, setDraft }) {
         <Input label="Beneficiary group" value={draft.beneficiaryGroup} onChange={(v) => update("beneficiaryGroup", v)} />
         <Input label="Beneficiaries" type="number" value={draft.beneficiaries} onChange={(v) => update("beneficiaries", Number(v))} />
         <Input label="Budget amount" type="number" value={draft.budgetAmount} onChange={(v) => update("budgetAmount", Number(v))} />
+        <Input label="NEP amount" type="number" value={draft.nepAmount} onChange={(v) => update("nepAmount", Number(v))} />
+        <Input label="GAA amount" type="number" value={draft.gaaAmount} onChange={(v) => update("gaaAmount", Number(v))} />
+        <Input label="Current phase" value={draft.phase} onChange={(v) => update("phase", v)} options={lifecyclePhases} />
         <Input label="Tier" value={draft.tier} onChange={(v) => update("tier", v)} options={["Tier 1", "Tier 2"]} />
         <Input label="Readiness status" value={draft.readinessStatus} onChange={(v) => update("readinessStatus", v)} options={["Concept", "With DED/POW", "Shovel-ready", "For validation"]} />
         <Input label="Climate tag" value={draft.climateTag} onChange={(v) => update("climateTag", v)} options={data.masterData.climateTags} />
@@ -720,14 +832,14 @@ function ProposalEditorFields({ data, draft, setDraft }) {
         <TextArea label="Expected output" value={draft.expectedOutput} onChange={(v) => update("expectedOutput", v)} options={expectedOutputOptions} />
         <TextArea label="Climate rationale" value={draft.climateRationale} onChange={(v) => update("climateRationale", v)} options={climateRationaleOptions} />
         <TextArea label="Remarks" value={draft.remarks} onChange={(v) => update("remarks", v)} />
-      </div>
+      </fieldset>
       <div className="line-editor">
         <h3>Budget Lines</h3>
         {(draft.budgetLines || []).length ? (draft.budgetLines || []).map((line, index) => (
           <div className="line-row" key={line.id || index}>
-            <Input label="Object code" value={line.objectCode} onChange={(v) => updateBudget(index, "objectCode", v)} options={data.masterData.objectCodes} />
-            <Input label="Expense class" value={line.expenseClass} onChange={(v) => updateBudget(index, "expenseClass", v)} options={data.masterData.expenseClasses} />
-            <Input label="Amount" type="number" value={line.amount} onChange={(v) => updateBudget(index, "amount", v)} />
+            <Input label="Object code" value={line.objectCode} onChange={(v) => updateBudget(index, "objectCode", v)} options={data.masterData.objectCodes} disabled={readOnly} />
+            <Input label="Expense class" value={line.expenseClass} onChange={(v) => updateBudget(index, "expenseClass", v)} options={data.masterData.expenseClasses} disabled={readOnly} />
+            <Input label="Amount" type="number" value={line.amount} onChange={(v) => updateBudget(index, "amount", v)} disabled={readOnly} />
           </div>
         )) : <p className="body-copy">No budget line rows yet. Use the main Budget amount field for imported records until detailed object codes are added.</p>}
       </div>
@@ -735,9 +847,9 @@ function ProposalEditorFields({ data, draft, setDraft }) {
         <h3>Physical Targets</h3>
         {(draft.physicalTargets || []).length ? (draft.physicalTargets || []).map((line, index) => (
           <div className="line-row" key={line.id || index}>
-            <Input label="Indicator" value={line.indicator} onChange={(v) => updateTarget(index, "indicator", v)} options={data.masterData.indicators.map((i) => i.name)} />
-            <Input label="Target" type="number" value={line.target} onChange={(v) => updateTarget(index, "target", v)} />
-            <Input label="Unit" value={line.unit} onChange={(v) => updateTarget(index, "unit", v)} options={data.masterData.unitsOfMeasure} />
+            <Input label="Indicator" value={line.indicator} onChange={(v) => updateTarget(index, "indicator", v)} options={data.masterData.indicators.map((i) => i.name)} disabled={readOnly} />
+            <Input label="Target" type="number" value={line.target} onChange={(v) => updateTarget(index, "target", v)} disabled={readOnly} />
+            <Input label="Unit" value={line.unit} onChange={(v) => updateTarget(index, "unit", v)} options={data.masterData.unitsOfMeasure} disabled={readOnly} />
           </div>
         )) : <p className="body-copy">No physical target rows yet. Add indicator and unit details when the reviewing office supplies the final target breakdown.</p>}
       </div>
@@ -745,19 +857,19 @@ function ProposalEditorFields({ data, draft, setDraft }) {
   );
 }
 
-function Input({ label, value, onChange, type = "text", options, wide }) {
+function Input({ label, value, onChange, type = "text", options, wide, disabled = false }) {
   return (
     <label className={`field ${wide ? "wide" : ""}`}>
       <span>{label}</span>
       {options ? (
-        <select value={value ?? ""} onChange={(event) => onChange(event.target.value)}>
+        <select value={value ?? ""} onChange={(event) => onChange(event.target.value)} disabled={disabled}>
           <option value="">Select...</option>
           {options.map((option) => (
             <option key={option}>{option}</option>
           ))}
         </select>
       ) : (
-        <input type={type} value={value ?? ""} onChange={(event) => onChange(event.target.value)} />
+        <input type={type} value={value ?? ""} onChange={(event) => onChange(event.target.value)} disabled={disabled} />
       )}
     </label>
   );
@@ -780,8 +892,8 @@ function TextArea({ label, value, onChange, options }) {
   );
 }
 
-function flashSaveNotice(setSaveNotice) {
-  setSaveNotice("Data entry successfully uploaded and saved in the database.");
+function flashSaveNotice(setSaveNotice, message = "Data entry successfully uploaded and saved in the database.") {
+  setSaveNotice(message);
   window.setTimeout(() => setSaveNotice(""), 4500);
 }
 
@@ -1019,10 +1131,35 @@ function Consolidation({ proposals }) {
   );
 }
 
-function PhaseTracking({ data, proposal }) {
+function PhaseTracking({ data, access, proposal, onAdvance }) {
   const history = data.phaseHistory.filter((row) => row.proposalId === proposal?.id);
+  const nextPhase = nextLifecyclePhase(proposal?.phase || "Proposal");
+  const issues = proposal ? validateProposal(proposal, data).issues : [];
+  const qualifies = proposal && !issues.length && ["Validated", "Approved"].includes(proposal.validationStatus || "");
   return (
     <section className="content-stack">
+      <Panel title="Phase Qualification" icon={ShieldCheck}>
+        {proposal ? (
+          <div className="phase-action">
+            <div>
+              <strong>{proposal.id} is in {proposal.phase || "Proposal"}</strong>
+              <p className="body-copy">
+                {qualifies ? "This PAP has no blocking validation issues and can qualify for the next lifecycle phase." : "This PAP still needs validation before it can qualify for the next lifecycle phase."}
+              </p>
+            </div>
+            <div className="phase-action-buttons">
+              <StatusBadge value={proposal.validationStatus || "Draft"} />
+              {nextPhase && access.canAdvance && (
+                <button className="primary" disabled={!qualifies} onClick={() => onAdvance({ proposal, toPhase: nextPhase, remarks: `Qualified for ${nextPhase}.` })}>
+                  <CheckCircle2 size={16} /> Move to {nextPhase}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p className="body-copy">Select a PAP record to review its lifecycle qualification.</p>
+        )}
+      </Panel>
       <Panel title="Phase Snapshots" icon={History}>
         <DataTable
           rows={history}
@@ -1039,13 +1176,25 @@ function PhaseTracking({ data, proposal }) {
       </Panel>
       <Panel title="Comparison View">
         <div className="comparison-grid">
-          {["Proposal vs NEP", "NEP vs GAA", "GAA vs BED", "Funded vs Unfunded"].map((label) => (
+          {["Proposal vs NEP", "NEP vs GAA", "GAA vs Implementation", "Implementation vs Monitoring and Evaluation"].map((label) => (
             <ComparisonCard key={label} label={label} history={history} />
           ))}
         </div>
       </Panel>
     </section>
   );
+}
+
+function nextLifecyclePhase(phase) {
+  const index = lifecyclePhases.indexOf(phase);
+  if (index < 0) return lifecyclePhases[0];
+  return lifecyclePhases[index + 1] || "";
+}
+
+function phaseAmount(proposal, phase) {
+  if (phase === "NEP") return Number(proposal.nepAmount || proposal.budgetAmount || 0);
+  if (["GAA", "Implementation", "Monitoring and Evaluation"].includes(phase)) return Number(proposal.gaaAmount || proposal.nepAmount || proposal.budgetAmount || 0);
+  return Number(proposal.budgetAmount || 0);
 }
 
 function ComparisonCard({ label, history }) {

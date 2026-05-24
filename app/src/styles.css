@@ -379,6 +379,38 @@ tr.selected td, tbody tr:hover td { background: #f7faf7; }
   border-color: #f4aaa3;
 }
 
+.access-banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid #cbd7cf;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 11px 13px;
+}
+
+.access-banner strong { display: block; font-size: 13px; }
+.access-banner span { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+.access-banner ul {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.access-banner li {
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: 4px 8px;
+  background: #f7faf7;
+  color: #344238;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .toast {
   border: 1px solid #b9dec7;
   border-radius: 8px;
@@ -387,6 +419,34 @@ tr.selected td, tbody tr:hover td { background: #f7faf7; }
   padding: 10px 12px;
   font-size: 13px;
   font-weight: 800;
+}
+
+fieldset.form-grid {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+input:disabled, select:disabled, textarea:disabled, button:disabled {
+  cursor: not-allowed;
+  opacity: .68;
+}
+
+.phase-action {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.phase-action strong { display: block; }
+.phase-action .body-copy { margin: 6px 0 0; }
+.phase-action-buttons {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .bulk-layout {
@@ -429,6 +489,8 @@ tr.selected td, tbody tr:hover td { background: #f7faf7; }
   .workspace { padding: 14px; }
   nav, .kpi-grid, .chart-grid, .form-grid, .line-row, .comparison-grid, .report-grid, .bulk-form { grid-template-columns: 1fr; }
   .field.wide { grid-column: span 1; }
+  .access-banner, .phase-action { align-items: stretch; display: grid; }
+  .access-banner ul, .phase-action-buttons { justify-content: flex-start; }
   .filter-strip { display: grid; grid-template-columns: 1fr; justify-content: stretch; width: 100%; }
   .field.compact, .field.compact select { width: 100%; min-width: 0; }
   .topbar h2 { font-size: 22px; }

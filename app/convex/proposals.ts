@@ -54,6 +54,14 @@ const proposalFields = {
   physicalTargets: v.optional(v.array(physicalTarget)),
 };
 
+const phaseOrder = [
+  "Proposal",
+  "NEP",
+  "GAA",
+  "Implementation",
+  "Monitoring and Evaluation",
+];
+
 export const listPage = query({
   args: {
     fiscalYear: v.string(),
@@ -105,6 +113,33 @@ export const getByProposalId = query({
   args: { proposalId: v.string() },
   handler: async (ctx, args) => {
     return await ctx.db.query("proposals").withIndex("by_proposalId", (q) => q.eq("proposalId", args.proposalId)).first();
+  },
+});
+
+export const listPhaseHistory = query({
+  args: { fiscalYear: v.string() },
+  handler: async (ctx, args) => {
+    const proposals = await ctx.db.query("proposals").withIndex("by_fiscalYear", (q) => q.eq("fiscalYear", args.fiscalYear)).collect();
+    const proposalIds = new Set(proposals.map((proposal) => proposal.proposalId));
+    const rows = await ctx.db.query("phaseHistory").collect();
+    return rows.filter((row) => proposalIds.has(row.proposalId)).sort((a, b) => a.proposalId.localeCompare(b.proposalId) || a.phase.localeCompare(b.phase));
+  },
+});
+
+export const listBulkSubmissions = query({
+  args: { fiscalYear: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db.query("bulkSubmissions").withIndex("by_fiscalYear_status", (q) => q.eq("fiscalYear", args.fiscalYear)).collect();
+  },
+});
+
+export const listAttachments = query({
+  args: { fiscalYear: v.string() },
+  handler: async (ctx, args) => {
+    const proposals = await ctx.db.query("proposals").withIndex("by_fiscalYear", (q) => q.eq("fiscalYear", args.fiscalYear)).collect();
+    const proposalIds = new Set(proposals.map((proposal) => proposal.proposalId));
+    const rows = await ctx.db.query("attachments").collect();
+    return rows.filter((row) => proposalIds.has(row.proposalId));
   },
 });
 
@@ -178,6 +213,63 @@ export const upsert = mutation({
   },
 });
 
+export const advancePhase = mutation({
+  args: {
+    proposalId: v.string(),
+    toPhase: v.string(),
+    remarks: v.optional(v.string()),
+    actor: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const proposal = await ctx.db.query("proposals").withIndex("by_proposalId", (q) => q.eq("proposalId", args.proposalId)).first();
+    if (!proposal) throw new Error(`Proposal ${args.proposalId} was not found.`);
+
+    const currentPhase = proposal.phase || "Proposal";
+    const currentIndex = phaseOrder.indexOf(currentPhase);
+    const nextIndex = phaseOrder.indexOf(args.toPhase);
+    if (nextIndex < 0) throw new Error(`${args.toPhase} is not a supported phase.`);
+    if (currentIndex >= 0 && nextIndex < currentIndex) {
+      throw new Error(`Cannot move ${args.proposalId} backward from ${currentPhase} to ${args.toPhase}.`);
+    }
+    if (!["Validated", "Approved"].includes(proposal.validationStatus)) {
+      throw new Error(`${args.proposalId} must be validated before moving to ${args.toPhase}.`);
+    }
+
+    await ctx.db.patch(proposal._id, {
+      phase: args.toPhase,
+      validationStatus: args.toPhase === "Monitoring and Evaluation" ? "Approved" : proposal.validationStatus,
+      updatedAt: now,
+      updatedBy: args.actor,
+    });
+
+    await ctx.db.insert("phaseHistory", {
+      proposalId: proposal.proposalId,
+      phase: args.toPhase,
+      date: new Date(now).toISOString().slice(0, 10),
+      budgetAmount: phaseAmount(proposal, args.toPhase),
+      physicalTarget: String(proposal.physicalTargets?.reduce((sum, target) => sum + Number(target.target || 0), 0) || ""),
+      editor: args.actor,
+      remarks: args.remarks || `Advanced from ${currentPhase} to ${args.toPhase}.`,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: args.actor,
+      updatedBy: args.actor,
+    });
+
+    await ctx.db.insert("auditLogs", {
+      entityType: "proposal",
+      entityId: args.proposalId,
+      action: "advance_phase",
+      actor: args.actor,
+      summary: `Advanced ${args.proposalId} from ${currentPhase} to ${args.toPhase}.`,
+      createdAt: now,
+    });
+
+    return { proposalId: args.proposalId, phase: args.toPhase };
+  },
+});
+
 function buildTitle(proposal: { interventionType?: string; commodity?: string; municipality?: string }) {
   return [proposal.interventionType, proposal.commodity, proposal.municipality].filter(Boolean).join(" - ") || "Untitled intervention";
 }
@@ -196,4 +288,10 @@ function buildSearchText(proposal: Record<string, unknown>) {
     proposal.interventionType,
     proposal.tier,
   ].filter(Boolean).join(" ");
+}
+
+function phaseAmount(proposal: { budgetAmount?: number; nepAmount?: number; gaaAmount?: number }, phase: string) {
+  if (phase === "NEP") return proposal.nepAmount || proposal.budgetAmount || 0;
+  if (phase === "GAA" || phase === "Implementation" || phase === "Monitoring and Evaluation") return proposal.gaaAmount || proposal.nepAmount || proposal.budgetAmount || 0;
+  return proposal.budgetAmount || 0;
 }
