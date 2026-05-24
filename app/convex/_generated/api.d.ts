@@ -12,6 +12,7 @@ import type * as dashboard from "../dashboard.js";
 import type * as imports from "../imports.js";
 import type * as masterData from "../masterData.js";
 import type * as proposals from "../proposals.js";
+import type * as seed from "../seed.js";
 import type * as validation from "../validation.js";
 import type * as validationRules from "../validationRules.js";
 
@@ -26,6 +27,7 @@ declare const fullApi: ApiFromModules<{
   imports: typeof imports;
   masterData: typeof masterData;
   proposals: typeof proposals;
+  seed: typeof seed;
   validation: typeof validation;
   validationRules: typeof validationRules;
 }>;
