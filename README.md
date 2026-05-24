@@ -2,19 +2,19 @@
 
 Working prototype for the Department of Agriculture - Regional Field Office No. 02 planning and budget workflow.
 
-The prototype follows the principle: encode once, validate once, reuse many times. It uses a repository/service layer so the first storage target can be Google Sheets and Google Drive, while the same app contracts can later move to Convex.
+The prototype follows the principle: encode once, validate once, reuse many times. Production storage now uses Convex, with Google Sheets/Apps Script retained only as a legacy integration path.
 
 ## What is included
 
 - React + Vite dashboard prototype in `app/`.
-- Production mode uses Google Sheets/Drive; demo seed data is available only when explicitly enabled.
-- Repository abstraction with a mock repository and Google Apps Script repository stub.
+- Production mode uses Convex; demo seed data is available only when explicitly enabled.
+- Repository abstraction with Convex, mock, and legacy Google Apps Script repository support.
 - Validation engine for required fields, duplicate activity titles, municipality-district mapping, Tier 2 readiness, budget/expense class, indicator-unit mismatch, and climate rationale checks.
 - Dashboard, proposal intake, master data, validation, consolidation, phase tracking, reports, MOV repository, and help screens.
 - Bulk Excel submission workflow for commodity banner program workbooks, FMR/infrastructure sheets, and BED capture workbooks.
 - Source inventory generated from every file under `source-files/` in `docs/source-analysis/source-requirements.md`.
 - Google Sheets/Drive setup guide, data dictionary, role matrix, and Convex migration notes.
-- Convex backend scaffold in `app/convex/` for the next production database phase.
+- Convex backend in `app/convex/` for production database operations.
 
 ## Source-file basis
 
@@ -52,40 +52,37 @@ The app currently defaults to the mock repository for local development:
 - `app/src/services/repository.js`
 - `app/src/seed/seedData.js`
 
-For Google Apps Script mode, deploy the Apps Script described in `docs/apps-script-setup.md`, then set:
+Production builds default to Convex:
 
 ```powershell
-$env:VITE_DATA_MODE="google"
-$env:VITE_APPS_SCRIPT_URL="https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec"
+$env:VITE_DATA_MODE="convex"
+$env:VITE_CONVEX_URL="https://fleet-wildebeest-776.convex.cloud"
 ```
 
-Production builds default to Google mode. Demo/sample records are only loaded with `VITE_DATA_MODE=demo` or `npm run dev:demo`.
+Demo/sample records are only loaded with `VITE_DATA_MODE=demo` or `npm run dev:demo`.
+
+For legacy Google Apps Script mode, deploy the Apps Script described in `docs/apps-script-setup.md`, then set `VITE_DATA_MODE=google` and `VITE_APPS_SCRIPT_URL`.
 
 The UI and validation logic should not talk to Google APIs directly. CRUD, Drive folder creation, file link/upload registration, report generation, and audit logging should flow through the repository/service layer.
 
-### Convex backend phase
-
-The first Convex backend scaffold is available in `app/convex/`. It includes schema, indexes, paginated proposal queries, validation issue queries, dashboard summaries, import mutations, and transactional proposal upsert.
-
-Use this when moving away from loading the whole Google Sheet in the browser:
+### Convex backend
 
 ```powershell
 cd "C:\Users\Jeff Factora\Downloads\PLAN-BUDGET Hub\app"
 npm run convex:dev
 ```
 
-After creating a Convex deployment, set:
+Production backend deployment:
 
 ```powershell
-VITE_DATA_MODE=convex
-VITE_CONVEX_URL=https://YOUR-CONVEX-DEPLOYMENT.convex.cloud
+npm run convex:deploy
 ```
 
 See `convex-migration/README.md` for the migration sequence and table mapping.
 
 ## Important folders
 
-- `app/src/services/` - repository abstraction and Google Apps Script client.
+- `app/src/services/` - repository abstraction with Convex production access and legacy Google Apps Script support.
 - `app/convex/` - Convex schema, queries, mutations, validation rules, and import functions.
 - `app/src/utils/validation.js` - validation engine.
 - `app/src/seed/` - local sample records.
@@ -101,6 +98,6 @@ See `convex-migration/README.md` for the migration sequence and table mapping.
 - `convex-migration/README.md` - table-to-Convex mapping.
 - `export-templates/` - template registry and sample CSV outputs.
 
-## Prototype limits
+## Production status
 
-This is a working frontend prototype with mock/local data and a Google Apps Script integration contract. The next production step is to create the Google Sheet tabs from `docs/data-dictionary.md`, deploy the Apps Script API, and wire `GoogleSheetsRepository.loadAllAsync()` into app startup.
+GitHub Pages production builds use Convex through `VITE_DATA_MODE=convex` and `VITE_CONVEX_URL=https://fleet-wildebeest-776.convex.cloud`.

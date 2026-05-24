@@ -91,17 +91,13 @@ export class ConvexRepository {
 
   async loadAllAsync({ fiscalYear = "2027" } = {}) {
     const client = this.assertClient();
-    const [masterData, proposalsPage, phaseHistory, bulkSubmissions, attachments] = await Promise.all([
+    const [masterData, proposals, phaseHistory, bulkSubmissions, attachments] = await Promise.all([
       client.query(anyApi.masterData.listCore, {}),
-      client.query(anyApi.proposals.listPage, {
-        fiscalYear,
-        paginationOpts: { numItems: 1000, cursor: null },
-      }),
+      this.loadAllProposals(fiscalYear),
       client.query(anyApi.proposals.listPhaseHistory, { fiscalYear }),
       client.query(anyApi.proposals.listBulkSubmissions, { fiscalYear }),
       client.query(anyApi.proposals.listAttachments, { fiscalYear }),
     ]);
-    const proposals = (proposalsPage?.page || []).map(fromConvexProposal);
     return {
       ...structuredClone(emptyData),
       session: {
@@ -115,7 +111,7 @@ export class ConvexRepository {
         { name: "Management", role: "Management", office: "Regional Management" },
       ],
       masterData: normalizeConvexMasterData(masterData),
-      proposals,
+      proposals: proposals.map(fromConvexProposal),
       phaseHistory: (phaseHistory || []).map(fromConvexPhaseHistory),
       bulkSubmissions: (bulkSubmissions || []).map(fromConvexBulkSubmission),
       attachments: (attachments || []).map(fromConvexAttachment),
@@ -126,6 +122,23 @@ export class ConvexRepository {
         { code: "MNE", name: "Monitoring and Evaluation Report", phase: "Monitoring and Evaluation", outputFormat: "CSV/XLSX" },
       ],
     };
+  }
+
+  async loadAllProposals(fiscalYear) {
+    const client = this.assertClient();
+    const rows = [];
+    let cursor = null;
+    for (let page = 0; page < 25; page += 1) {
+      const result = await client.query(anyApi.proposals.listPage, {
+        fiscalYear,
+        paginationOpts: { numItems: 500, cursor },
+      });
+      rows.push(...(result?.page || []));
+      if (result?.isDone) break;
+      cursor = result?.continueCursor || null;
+      if (!cursor) break;
+    }
+    return rows;
   }
 
   async saveProposalAsync(proposal, actor = "Planning Officer") {
