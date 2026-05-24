@@ -35,6 +35,11 @@ jobs:
 
       - name: Build production app
         working-directory: app
+        env:
+          VITE_DATA_MODE: convex
+          VITE_CONVEX_URL: https://fleet-wildebeest-776.convex.cloud
+          VITE_CURRENT_USER: Production User
+          VITE_CURRENT_ROLE: Management
         run: npm run build:production
 
       - name: Configure GitHub Pages

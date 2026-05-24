@@ -96,7 +96,7 @@ const batchSize = 100;
 let inserted = 0;
 let updated = 0;
 for (let i = 0; i < proposals.length; i += batchSize) {
-  const result = await client.mutation(anyApi.imports.importProposalBatch, {
+  const result = await client.mutation(anyApi.imports.importProposalBatchFast, {
     rows: proposals.slice(i, i + batchSize),
     actor: process.env.VITE_CURRENT_USER || "Planning Officer",
   });

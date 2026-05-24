@@ -93,6 +93,67 @@ export const importProposalBatch = mutation({
   },
 });
 
+export const importProposalBatchFast = mutation({
+  args: {
+    rows: v.array(proposalImportRow),
+    actor: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const fiscalYears = [...new Set(args.rows.map((row) => row.fiscalYear))];
+    const existingRows = [];
+    for (const fiscalYear of fiscalYears) {
+      existingRows.push(...await ctx.db.query("proposals").withIndex("by_fiscalYear", (q) => q.eq("fiscalYear", fiscalYear)).collect());
+    }
+    const existingByProposalId = new Map(existingRows.map((row) => [row.proposalId, row]));
+    let inserted = 0;
+    let updated = 0;
+    for (const row of args.rows) {
+      const existing = existingByProposalId.get(row.proposalId);
+      const doc = {
+        ...row,
+        title: row.title || [row.interventionType, row.commodity, row.municipality].filter(Boolean).join(" - ") || "Untitled intervention",
+        pap: row.mfo || row.pap || "",
+        beneficiaries: row.beneficiaries || 0,
+        budgetAmount: row.budgetAmount || 0,
+        nepAmount: row.nepAmount || 0,
+        gaaAmount: row.gaaAmount || 0,
+        phase: "Proposal",
+        validationStatus: row.validationStatus || "Draft",
+        edited: Boolean(existing) || isEdited(row),
+        searchText: [
+          row.proposalId,
+          row.title,
+          row.office,
+          row.program,
+          row.mfo,
+          row.province,
+          row.municipality,
+          row.district,
+          row.commodity,
+          row.interventionType,
+          row.tier,
+        ].filter(Boolean).join(" "),
+        budgetLines: [],
+        physicalTargets: [],
+        createdAt: row.createdAt || existing?.createdAt || now,
+        updatedAt: row.updatedAt || now,
+        createdBy: row.createdBy || existing?.createdBy || args.actor,
+        updatedBy: args.actor,
+      };
+      if (existing) {
+        await ctx.db.patch(existing._id, doc);
+        updated += 1;
+      } else {
+        const id = await ctx.db.insert("proposals", doc);
+        existingByProposalId.set(row.proposalId, { ...doc, _id: id } as any);
+        inserted += 1;
+      }
+    }
+    return { inserted, updated };
+  },
+});
+
 export const importMunicipalityBatch = mutation({
   args: {
     rows: v.array(v.object({
