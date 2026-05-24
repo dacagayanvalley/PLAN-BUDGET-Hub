@@ -174,6 +174,12 @@ function readSavedSessionToken() {
   }
 }
 
+function friendlyErrorMessage(error) {
+  if (typeof error?.data === "string") return error.data;
+  if (error?.data?.message) return error.data.message;
+  return error?.message || "Unexpected error.";
+}
+
 function App() {
   const [active, setActiveState] = useState(() => window.location.hash.replace("#", "") || "dashboard");
   const [data, setData] = useState(() => repo.loadAll());
@@ -184,6 +190,7 @@ function App() {
     fiscalYear: "2027",
     program: "All",
     province: "All",
+    district: "All",
     status: "All",
   });
   const [selectedProposalId, setSelectedProposalId] = useState(data.proposals[0]?.id);
@@ -239,7 +246,7 @@ function App() {
         return rows || [];
       })
       .catch((error) => {
-        setLoadState({ status: "error", error: error.message });
+        setLoadState({ status: "error", error: friendlyErrorMessage(error) });
         return [];
       });
   };
@@ -256,7 +263,7 @@ function App() {
         loadPasswordResetRequests();
       })
       .catch((error) => {
-        setLoadState({ status: "error", error: error.message });
+        setLoadState({ status: "error", error: friendlyErrorMessage(error) });
       });
   };
 
@@ -269,7 +276,7 @@ function App() {
           if (!cancelled) setData((current) => ({ ...current, users: users || [] }));
         })
         .catch((error) => {
-          if (!cancelled) setLoadState({ status: "error", error: error.message });
+          if (!cancelled) setLoadState({ status: "error", error: friendlyErrorMessage(error) });
         });
       setLoadState({ status: "ready", error: "" });
       return () => {
@@ -287,7 +294,7 @@ function App() {
       })
       .catch((error) => {
         if (cancelled) return;
-        setLoadState({ status: "error", error: error.message });
+        setLoadState({ status: "error", error: friendlyErrorMessage(error) });
       });
     return () => {
       cancelled = true;
@@ -324,6 +331,7 @@ function App() {
         String(proposal.fiscalYear) === filters.fiscalYear &&
         (filters.program === "All" || proposal.program === filters.program) &&
         (filters.province === "All" || proposal.province === filters.province) &&
+        (filters.district === "All" || proposal.district === filters.district) &&
         (filters.status === "All" || proposal.validationStatus === filters.status)
       );
     });
@@ -353,7 +361,7 @@ function App() {
           setSelectedProposalId("__new__");
           flashSaveNotice(setSaveNotice);
         })
-        .catch((error) => setLoadState({ status: "error", error: error.message }));
+        .catch((error) => setLoadState({ status: "error", error: friendlyErrorMessage(error) }));
     } else {
       setData((current) => repo.saveProposal(current, next));
       setSelectedProposalId("__new__");
@@ -374,7 +382,7 @@ function App() {
       repo.advancePhaseAsync({ proposalId: proposal.id, toPhase, remarks, actor: data.session.user, sessionToken })
         .then(() => reloadProductionData())
         .then(() => flashSaveNotice(setSaveNotice, `${proposal.id} moved to ${toPhase}.`))
-        .catch((error) => setLoadState({ status: "error", error: error.message }));
+        .catch((error) => setLoadState({ status: "error", error: friendlyErrorMessage(error) }));
       return;
     }
     setData((current) => ({
@@ -429,7 +437,7 @@ function App() {
           ...current,
           bulkSubmissions: [saved || next, ...(current.bulkSubmissions || [])],
         })))
-        .catch((error) => setLoadState({ status: "error", error: error.message }));
+        .catch((error) => setLoadState({ status: "error", error: friendlyErrorMessage(error) }));
       return;
     }
     setData((current) => ({
@@ -486,7 +494,7 @@ function App() {
           repo={repo}
           sessionToken={sessionToken}
           onChanged={(message) => flashSaveNotice(setSaveNotice, message)}
-          onError={(error) => setLoadState({ status: "error", error: error.message })}
+          onError={(error) => setLoadState({ status: "error", error: friendlyErrorMessage(error) })}
         />
         {active === "dashboard" && (
           <Dashboard data={data} proposals={filteredProposals} validationResults={validationResults} />
@@ -516,7 +524,7 @@ function App() {
               flashSaveNotice(setSaveNotice, message);
               return loadPasswordResetRequests().then(() => reloadProductionData());
             }}
-            onError={(error) => setLoadState({ status: "error", error: error.message })}
+            onError={(error) => setLoadState({ status: "error", error: friendlyErrorMessage(error) })}
           />
         )}
         {active === "validation" && (
@@ -573,7 +581,7 @@ function LoginScreen({ data, loadState, onLogin, repo, dataMode }) {
         onLogin(result);
       })
       .catch((error) => {
-        setLoginState({ status: "error", error: error.message });
+        setLoginState({ status: "error", error: friendlyErrorMessage(error) });
       });
   };
   const requestReset = () => {
@@ -581,7 +589,7 @@ function LoginScreen({ data, loadState, onLogin, repo, dataMode }) {
     setResetState({ status: "loading", message: "" });
     repo.requestPasswordResetAsync({ name: selectedUser.name, note: resetNote })
       .then(() => setResetState({ status: "ready", message: "Password reset request sent to Admin." }))
-      .catch((error) => setResetState({ status: "error", message: error.message }));
+      .catch((error) => setResetState({ status: "error", message: friendlyErrorMessage(error) }));
   };
 
   return (
@@ -832,6 +840,15 @@ function AccessBanner({ data, access, onSignOut }) {
 }
 
 function Header({ data, filters, setFilters, onRefresh, loadState }) {
+  const districtOptions = useMemo(() => {
+    if (filters.province === "All") return data.masterData.districts;
+    const fromMunicipalities = data.masterData.municipalities
+      .filter((row) => municipalityProvince(row) === filters.province)
+      .map((row) => municipalityDistrict(row))
+      .filter(Boolean);
+    const fromDistrictList = data.masterData.districts.filter((district) => inferDistrictProvince(district) === filters.province);
+    return [...new Set([...fromMunicipalities, ...fromDistrictList])].sort();
+  }, [data.masterData.districts, data.masterData.municipalities, filters.province]);
   return (
     <header className="topbar">
       <div>
@@ -841,7 +858,8 @@ function Header({ data, filters, setFilters, onRefresh, loadState }) {
       <div className="filter-strip">
         <SelectFilter label="Year" value={filters.fiscalYear} options={["2027", "2026", "2025"]} onChange={(fiscalYear) => setFilters((f) => ({ ...f, fiscalYear }))} />
         <SelectFilter label="Program" value={filters.program} options={["All", ...data.masterData.programs.map((p) => p.name)]} onChange={(program) => setFilters((f) => ({ ...f, program }))} />
-        <SelectFilter label="Province" value={filters.province} options={["All", ...data.masterData.provinces]} onChange={(province) => setFilters((f) => ({ ...f, province }))} />
+        <SelectFilter label="Province" value={filters.province} options={["All", ...data.masterData.provinces]} onChange={(province) => setFilters((f) => ({ ...f, province, district: "All" }))} />
+        <SelectFilter label="District" value={filters.district} options={["All", ...districtOptions]} onChange={(district) => setFilters((f) => ({ ...f, district }))} />
         <SelectFilter label="Status" value={filters.status} options={["All", "Draft", "Needs Correction", "Validated", "Approved"]} onChange={(status) => setFilters((f) => ({ ...f, status }))} />
         {["google", "convex"].includes(dataMode) && (
           <button className="ghost refresh-button" onClick={onRefresh} disabled={loadState.status === "loading"}>
@@ -1204,6 +1222,7 @@ function validationStatusOptions(access, session) {
 function resolveClientValidationStatus(requestedStatus, issues, access, session) {
   const allowed = validationStatusOptions(access, session);
   const computed = issues.length ? "Needs Correction" : (access?.label === "Program Officer" ? "Draft" : "Validated");
+  if (issues.length && ["Validated", "Approved"].includes(requestedStatus)) return "Needs Correction";
   if (allowed.includes(requestedStatus)) return requestedStatus;
   if (allowed.includes(computed)) return computed;
   return issues.length ? "Needs Correction" : "Validated";

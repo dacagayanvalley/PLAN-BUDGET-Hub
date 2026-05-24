@@ -1,5 +1,5 @@
 import { paginationOptsValidator } from "convex/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { editableRoles, requireRole, requireUser } from "./authHelpers";
 import { validateProposalInput } from "./validationRules";
@@ -236,13 +236,13 @@ function resolveValidationStatus(role: string, office: string | undefined, reque
   };
   const allowed = allowedByRole[role] || [];
   if (!allowed.includes(requested)) {
-    throw new Error(`${role} cannot set validation status to ${requested}.`);
+    throw new ConvexError(`${role} cannot set validation status to ${requested}.`);
   }
   if (requested === "Approved" && computedStatus === "Needs Correction") {
-    throw new Error("Records with validation issues cannot be approved.");
+    throw new ConvexError("Records with validation issues cannot be approved. Set the status to Needs Correction first.");
   }
   if (requested === "Validated" && computedStatus === "Needs Correction") {
-    throw new Error("Records with validation issues cannot be marked Validated.");
+    throw new ConvexError("Records with validation issues cannot be marked Validated. Correct the issues or set Needs Correction.");
   }
   return requested;
 }
@@ -267,22 +267,22 @@ export const advancePhase = mutation({
   handler: async (ctx, args) => {
     const session = await requireRole(ctx, args.sessionToken, editableRoles);
     if (!canApprove(session.role, session.publicUser.office)) {
-      throw new Error("Only Admin and PMED/PIPS officers can advance records across phases.");
+      throw new ConvexError("Only Admin and PMED/PIPS officers can advance records across phases.");
     }
     const actor = session.publicUser.name;
     const now = Date.now();
     const proposal = await ctx.db.query("proposals").withIndex("by_proposalId", (q) => q.eq("proposalId", args.proposalId)).first();
-    if (!proposal) throw new Error(`Proposal ${args.proposalId} was not found.`);
+    if (!proposal) throw new ConvexError(`Proposal ${args.proposalId} was not found.`);
 
     const currentPhase = proposal.phase || "Proposal";
     const currentIndex = phaseOrder.indexOf(currentPhase);
     const nextIndex = phaseOrder.indexOf(args.toPhase);
-    if (nextIndex < 0) throw new Error(`${args.toPhase} is not a supported phase.`);
+    if (nextIndex < 0) throw new ConvexError(`${args.toPhase} is not a supported phase.`);
     if (currentIndex >= 0 && nextIndex < currentIndex) {
-      throw new Error(`Cannot move ${args.proposalId} backward from ${currentPhase} to ${args.toPhase}.`);
+      throw new ConvexError(`Cannot move ${args.proposalId} backward from ${currentPhase} to ${args.toPhase}.`);
     }
     if (!["Validated", "Approved"].includes(proposal.validationStatus)) {
-      throw new Error(`${args.proposalId} must be validated before moving to ${args.toPhase}.`);
+      throw new ConvexError(`${args.proposalId} must be validated before moving to ${args.toPhase}.`);
     }
 
     await ctx.db.patch(proposal._id, {
