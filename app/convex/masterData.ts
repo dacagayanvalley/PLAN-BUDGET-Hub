@@ -1,10 +1,12 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { QueryCtx, mutation, query } from "./_generated/server";
+import { editableRoles, publicUser, requireRole, requireUser } from "./authHelpers";
 
 export const listCore = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { sessionToken: v.string() },
+  handler: async (ctx, args) => {
+    await requireUser(ctx, args.sessionToken);
     const [
       municipalities,
       interventionTypes,
@@ -59,7 +61,7 @@ export const listCore = query({
       climateTags,
       gedsiTags,
       mfos,
-      users,
+      users: users.map(publicUser),
     };
   },
 });
@@ -67,9 +69,11 @@ export const listCore = query({
 export const listInterventions = query({
   args: {
     search: v.optional(v.string()),
+    sessionToken: v.string(),
     paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.sessionToken);
     if (args.search) {
       return await ctx.db
         .query("interventionTypes")
@@ -86,9 +90,10 @@ export const upsertMunicipality = mutation({
     province: v.string(),
     district: v.string(),
     psgc: v.optional(v.string()),
-    actor: v.string(),
+    sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
+    const session = await requireRole(ctx, args.sessionToken, editableRoles);
     const now = Date.now();
     const existing = await ctx.db.query("municipalities").withIndex("by_name", (q) => q.eq("name", args.name)).first();
     const row = {
@@ -98,9 +103,9 @@ export const upsertMunicipality = mutation({
       psgc: args.psgc,
       searchText: [args.name, args.province, args.district, args.psgc].filter(Boolean).join(" "),
       updatedAt: now,
-      updatedBy: args.actor,
+      updatedBy: session.publicUser.name,
       createdAt: existing?.createdAt || now,
-      createdBy: existing?.createdBy || args.actor,
+      createdBy: existing?.createdBy || session.publicUser.name,
     };
     if (existing) await ctx.db.patch(existing._id, row);
     else await ctx.db.insert("municipalities", row);

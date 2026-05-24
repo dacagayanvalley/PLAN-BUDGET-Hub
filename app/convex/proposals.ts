@@ -1,6 +1,7 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { editableRoles, requireRole, requireUser } from "./authHelpers";
 import { validateProposalInput } from "./validationRules";
 
 const budgetLine = v.object({
@@ -71,9 +72,11 @@ export const listPage = query({
     office: v.optional(v.string()),
     province: v.optional(v.string()),
     search: v.optional(v.string()),
+    sessionToken: v.string(),
     paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.sessionToken);
     if (args.search) {
       return await ctx.db
         .query("proposals")
@@ -110,15 +113,17 @@ export const listPage = query({
 });
 
 export const getByProposalId = query({
-  args: { proposalId: v.string() },
+  args: { proposalId: v.string(), sessionToken: v.string() },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.sessionToken);
     return await ctx.db.query("proposals").withIndex("by_proposalId", (q) => q.eq("proposalId", args.proposalId)).first();
   },
 });
 
 export const listPhaseHistory = query({
-  args: { fiscalYear: v.string() },
+  args: { fiscalYear: v.string(), sessionToken: v.string() },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.sessionToken);
     const proposals = await ctx.db.query("proposals").withIndex("by_fiscalYear", (q) => q.eq("fiscalYear", args.fiscalYear)).collect();
     const proposalIds = new Set(proposals.map((proposal) => proposal.proposalId));
     const rows = await ctx.db.query("phaseHistory").collect();
@@ -127,15 +132,17 @@ export const listPhaseHistory = query({
 });
 
 export const listBulkSubmissions = query({
-  args: { fiscalYear: v.string() },
+  args: { fiscalYear: v.string(), sessionToken: v.string() },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.sessionToken);
     return await ctx.db.query("bulkSubmissions").withIndex("by_fiscalYear_status", (q) => q.eq("fiscalYear", args.fiscalYear)).collect();
   },
 });
 
 export const listAttachments = query({
-  args: { fiscalYear: v.string() },
+  args: { fiscalYear: v.string(), sessionToken: v.string() },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.sessionToken);
     const proposals = await ctx.db.query("proposals").withIndex("by_fiscalYear", (q) => q.eq("fiscalYear", args.fiscalYear)).collect();
     const proposalIds = new Set(proposals.map((proposal) => proposal.proposalId));
     const rows = await ctx.db.query("attachments").collect();
@@ -146,9 +153,11 @@ export const listAttachments = query({
 export const upsert = mutation({
   args: {
     proposal: v.object(proposalFields),
-    actor: v.string(),
+    sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
+    const session = await requireRole(ctx, args.sessionToken, editableRoles);
+    const actor = session.publicUser.name;
     const now = Date.now();
     const existing = await ctx.db.query("proposals").withIndex("by_proposalId", (q) => q.eq("proposalId", args.proposal.proposalId)).first();
     const issues = await validateProposalInput(ctx, {
@@ -172,9 +181,9 @@ export const upsert = mutation({
       budgetLines: args.proposal.budgetLines || [],
       physicalTargets: args.proposal.physicalTargets || [],
       updatedAt: now,
-      updatedBy: args.actor,
+      updatedBy: actor,
       createdAt: existing?.createdAt || now,
-      createdBy: existing?.createdBy || args.actor,
+      createdBy: existing?.createdBy || actor,
     };
 
     if (existing) {
@@ -196,15 +205,15 @@ export const upsert = mutation({
       resolved: false,
       createdAt: now,
       updatedAt: now,
-      createdBy: args.actor,
-      updatedBy: args.actor,
+      createdBy: actor,
+      updatedBy: actor,
     })));
 
     await ctx.db.insert("auditLogs", {
       entityType: "proposal",
       entityId: args.proposal.proposalId,
       action: existing ? "update" : "create",
-      actor: args.actor,
+      actor,
       summary: `${existing ? "Updated" : "Created"} ${args.proposal.proposalId}; validation status ${validationStatus}.`,
       createdAt: now,
     });
@@ -218,9 +227,11 @@ export const advancePhase = mutation({
     proposalId: v.string(),
     toPhase: v.string(),
     remarks: v.optional(v.string()),
-    actor: v.string(),
+    sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
+    const session = await requireRole(ctx, args.sessionToken, editableRoles);
+    const actor = session.publicUser.name;
     const now = Date.now();
     const proposal = await ctx.db.query("proposals").withIndex("by_proposalId", (q) => q.eq("proposalId", args.proposalId)).first();
     if (!proposal) throw new Error(`Proposal ${args.proposalId} was not found.`);
@@ -240,7 +251,7 @@ export const advancePhase = mutation({
       phase: args.toPhase,
       validationStatus: args.toPhase === "Monitoring and Evaluation" ? "Approved" : proposal.validationStatus,
       updatedAt: now,
-      updatedBy: args.actor,
+      updatedBy: actor,
     });
 
     await ctx.db.insert("phaseHistory", {
@@ -249,19 +260,19 @@ export const advancePhase = mutation({
       date: new Date(now).toISOString().slice(0, 10),
       budgetAmount: phaseAmount(proposal, args.toPhase),
       physicalTarget: String(proposal.physicalTargets?.reduce((sum, target) => sum + Number(target.target || 0), 0) || ""),
-      editor: args.actor,
+      editor: actor,
       remarks: args.remarks || `Advanced from ${currentPhase} to ${args.toPhase}.`,
       createdAt: now,
       updatedAt: now,
-      createdBy: args.actor,
-      updatedBy: args.actor,
+      createdBy: actor,
+      updatedBy: actor,
     });
 
     await ctx.db.insert("auditLogs", {
       entityType: "proposal",
       entityId: args.proposalId,
       action: "advance_phase",
-      actor: args.actor,
+      actor,
       summary: `Advanced ${args.proposalId} from ${currentPhase} to ${args.toPhase}.`,
       createdAt: now,
     });

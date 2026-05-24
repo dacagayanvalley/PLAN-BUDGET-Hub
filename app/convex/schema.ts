@@ -29,10 +29,21 @@ export default defineSchema({
     role: v.string(),
     office: v.optional(v.string()),
     status: v.string(),
+    passwordHash: v.optional(v.string()),
     ...auditFields,
   })
     .index("by_email", ["email"])
     .index("by_role", ["role"]),
+
+  userSessions: defineTable({
+    sessionToken: v.string(),
+    userId: v.id("users"),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+    lastSeenAt: v.number(),
+  })
+    .index("by_sessionToken", ["sessionToken"])
+    .index("by_userId", ["userId"]),
 
   proposals: defineTable({
     proposalId: v.string(),

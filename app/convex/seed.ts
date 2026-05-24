@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation } from "./_generated/server";
+import { defaultPassword, editableRoles, hashPassword, requireRole } from "./authHelpers";
 
 const auditActor = "Convex seed";
 
@@ -62,8 +63,13 @@ export const seedMasterData = mutation({
     expenseClasses: v.array(v.string()),
     climateTags: v.array(v.string()),
     gedsiTags: v.array(v.string()),
+    sessionToken: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const existingUser = await ctx.db.query("users").first();
+    if (existingUser) {
+      await requireRole(ctx, args.sessionToken || "", editableRoles);
+    }
     const now = Date.now();
     const counts: Record<string, number> = {};
 
@@ -87,6 +93,7 @@ export const seedMasterData = mutation({
 
 async function upsertUsers(ctx: any, users: Array<{ name: string; role: string; office?: string; email?: string }>, now: number) {
   let count = 0;
+  const fallbackPasswordHash = await hashPassword(defaultPassword);
   for (const user of users) {
     const existing = user.email
       ? await ctx.db.query("users").withIndex("by_email", (q: any) => q.eq("email", user.email)).first()
@@ -98,6 +105,7 @@ async function upsertUsers(ctx: any, users: Array<{ name: string; role: string; 
       role: normalizeRole(user.role),
       office: user.office,
       status: "Active",
+      passwordHash: fallback?.passwordHash || fallbackPasswordHash,
       createdAt: fallback?.createdAt || now,
       updatedAt: now,
       createdBy: fallback?.createdBy || auditActor,
@@ -194,8 +202,8 @@ async function upsertInterventionTypes(ctx: any, rows: Array<Record<string, any>
 function normalizeRole(role: string) {
   const value = role.toLowerCase();
   if (value.includes("admin") || value.includes("system")) return "Admin";
-  if (value.includes("management") || value.includes("viewer")) return "Management";
   if (value.includes("reviewer") || value.includes("pmed") || value.includes("planning")) return "Planning Officer";
   if (value.includes("encoder") || value.includes("program")) return "Program Officer";
+  if (value.includes("management") || value.includes("viewer")) return "Management";
   return role;
 }

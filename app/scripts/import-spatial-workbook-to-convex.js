@@ -28,7 +28,12 @@ if (extraction.status !== 0) {
 
 const extracted = JSON.parse(extraction.stdout);
 const client = new ConvexHttpClient(convexUrl);
-const masterData = await client.query(anyApi.masterData.listCore, {});
+const login = await client.mutation(anyApi.auth.login, {
+  name: process.env.PLAN_BUDGET_ADMIN_USER || "System Admin",
+  password: process.env.PLAN_BUDGET_ADMIN_PASSWORD || "PlanBudget2027!",
+});
+const sessionToken = login.sessionToken;
+const masterData = await client.query(anyApi.masterData.listCore, { sessionToken });
 const municipalityMap = new Map((masterData.municipalities || []).map((row) => [normalize(row.name), row]));
 const programByName = new Map((masterData.programs || []).map((row) => [normalize(row.name), row]));
 
@@ -46,6 +51,7 @@ await client.mutation(anyApi.seed.seedMasterData, {
   expenseClasses: [],
   climateTags: [],
   gedsiTags: [],
+  sessionToken,
 });
 
 const proposals = extracted.entries.map((entry, index) => {
@@ -98,7 +104,7 @@ let updated = 0;
 for (let i = 0; i < proposals.length; i += batchSize) {
   const result = await client.mutation(anyApi.imports.importProposalBatchFast, {
     rows: proposals.slice(i, i + batchSize),
-    actor: process.env.VITE_CURRENT_USER || "Planning Officer",
+    sessionToken,
   });
   inserted += result.inserted || 0;
   updated += result.updated || 0;
@@ -119,7 +125,7 @@ const submissionResult = await client.mutation(anyApi.imports.registerBulkSubmis
   phase: "Proposal",
   status: "Imported",
   remarks: `Imported ${proposals.length} proposal rows from ${basename(workbookPath)}.`,
-  actor: process.env.VITE_CURRENT_USER || "Planning Officer",
+  sessionToken,
 });
 
 console.log(JSON.stringify({

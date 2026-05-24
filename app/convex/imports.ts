@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation } from "./_generated/server";
+import { editableRoles, requireRole } from "./authHelpers";
 
 const proposalImportRow = v.object({
   proposalId: v.string(),
@@ -42,9 +43,11 @@ const proposalImportRow = v.object({
 export const importProposalBatch = mutation({
   args: {
     rows: v.array(proposalImportRow),
-    actor: v.string(),
+    sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
+    const session = await requireRole(ctx, args.sessionToken, editableRoles);
+    const actor = session.publicUser.name;
     const now = Date.now();
     let inserted = 0;
     let updated = 0;
@@ -78,8 +81,8 @@ export const importProposalBatch = mutation({
         physicalTargets: [],
         createdAt: row.createdAt || existing?.createdAt || now,
         updatedAt: row.updatedAt || now,
-        createdBy: row.createdBy || existing?.createdBy || args.actor,
-        updatedBy: row.updatedBy || args.actor,
+        createdBy: row.createdBy || existing?.createdBy || actor,
+        updatedBy: row.updatedBy || actor,
       };
       if (existing) {
         await ctx.db.patch(existing._id, doc);
@@ -96,9 +99,11 @@ export const importProposalBatch = mutation({
 export const importProposalBatchFast = mutation({
   args: {
     rows: v.array(proposalImportRow),
-    actor: v.string(),
+    sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
+    const session = await requireRole(ctx, args.sessionToken, editableRoles);
+    const actor = session.publicUser.name;
     const now = Date.now();
     const fiscalYears = [...new Set(args.rows.map((row) => row.fiscalYear))];
     const existingRows = [];
@@ -138,8 +143,8 @@ export const importProposalBatchFast = mutation({
         physicalTargets: [],
         createdAt: row.createdAt || existing?.createdAt || now,
         updatedAt: row.updatedAt || now,
-        createdBy: row.createdBy || existing?.createdBy || args.actor,
-        updatedBy: args.actor,
+        createdBy: row.createdBy || existing?.createdBy || actor,
+        updatedBy: actor,
       };
       if (existing) {
         await ctx.db.patch(existing._id, doc);
@@ -162,9 +167,11 @@ export const importMunicipalityBatch = mutation({
       district: v.string(),
       psgc: v.optional(v.string()),
     })),
-    actor: v.string(),
+    sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
+    const session = await requireRole(ctx, args.sessionToken, editableRoles);
+    const actor = session.publicUser.name;
     const now = Date.now();
     let inserted = 0;
     let updated = 0;
@@ -175,8 +182,8 @@ export const importMunicipalityBatch = mutation({
         searchText: [row.name, row.province, row.district, row.psgc].filter(Boolean).join(" "),
         createdAt: existing?.createdAt || now,
         updatedAt: now,
-        createdBy: existing?.createdBy || args.actor,
-        updatedBy: args.actor,
+        createdBy: existing?.createdBy || actor,
+        updatedBy: actor,
       };
       if (existing) {
         await ctx.db.patch(existing._id, doc);
@@ -201,9 +208,11 @@ export const registerBulkSubmission = mutation({
     phase: v.optional(v.string()),
     status: v.string(),
     remarks: v.optional(v.string()),
-    actor: v.string(),
+    sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
+    const session = await requireRole(ctx, args.sessionToken, editableRoles);
+    const actor = session.publicUser.name;
     const now = Date.now();
     const existing = await ctx.db.query("bulkSubmissions").withIndex("by_submissionId", (q) => q.eq("submissionId", args.submissionId)).first();
     const doc = {
@@ -218,8 +227,8 @@ export const registerBulkSubmission = mutation({
       remarks: args.remarks,
       createdAt: existing?.createdAt || now,
       updatedAt: now,
-      createdBy: existing?.createdBy || args.actor,
-      updatedBy: args.actor,
+      createdBy: existing?.createdBy || actor,
+      updatedBy: actor,
     };
     if (existing) {
       await ctx.db.patch(existing._id, doc);

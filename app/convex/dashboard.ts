@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
+import { requireUser } from "./authHelpers";
 
 export const summary = query({
   args: {
@@ -7,8 +8,10 @@ export const summary = query({
     program: v.optional(v.string()),
     province: v.optional(v.string()),
     status: v.optional(v.string()),
+    sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
+    await requireUser(ctx, args.sessionToken);
     const proposals = await ctx.db.query("proposals").withIndex("by_fiscalYear", (q) => q.eq("fiscalYear", args.fiscalYear)).collect();
     const filtered = proposals.filter((proposal) => (
       (!args.program || proposal.program === args.program) &&

@@ -89,14 +89,27 @@ export class ConvexRepository {
     return structuredClone(emptyData);
   }
 
-  async loadAllAsync({ fiscalYear = "2027" } = {}) {
+  async loadLoginUsersAsync() {
+    return this.assertClient().query(anyApi.auth.listLoginUsers, {});
+  }
+
+  async loginAsync({ name, password }) {
+    return this.assertClient().mutation(anyApi.auth.login, { name, password });
+  }
+
+  async logoutAsync(sessionToken) {
+    if (!sessionToken) return { ok: true };
+    return this.assertClient().mutation(anyApi.auth.logout, { sessionToken });
+  }
+
+  async loadAllAsync({ fiscalYear = "2027", sessionToken } = {}) {
     const client = this.assertClient();
     const [masterData, proposals, phaseHistory, bulkSubmissions, attachments] = await Promise.all([
-      client.query(anyApi.masterData.listCore, {}),
-      this.loadAllProposals(fiscalYear),
-      client.query(anyApi.proposals.listPhaseHistory, { fiscalYear }),
-      client.query(anyApi.proposals.listBulkSubmissions, { fiscalYear }),
-      client.query(anyApi.proposals.listAttachments, { fiscalYear }),
+      client.query(anyApi.masterData.listCore, { sessionToken }),
+      this.loadAllProposals(fiscalYear, sessionToken),
+      client.query(anyApi.proposals.listPhaseHistory, { fiscalYear, sessionToken }),
+      client.query(anyApi.proposals.listBulkSubmissions, { fiscalYear, sessionToken }),
+      client.query(anyApi.proposals.listAttachments, { fiscalYear, sessionToken }),
     ]);
     return {
       ...structuredClone(emptyData),
@@ -124,13 +137,14 @@ export class ConvexRepository {
     };
   }
 
-  async loadAllProposals(fiscalYear) {
+  async loadAllProposals(fiscalYear, sessionToken) {
     const client = this.assertClient();
     const rows = [];
     let cursor = null;
     for (let page = 0; page < 25; page += 1) {
       const result = await client.query(anyApi.proposals.listPage, {
         fiscalYear,
+        sessionToken,
         paginationOpts: { numItems: 500, cursor },
       });
       rows.push(...(result?.page || []));
@@ -141,13 +155,29 @@ export class ConvexRepository {
     return rows;
   }
 
-  async saveProposalAsync(proposal, actor = "Planning Officer") {
+  async saveProposalAsync(proposal, actor = "Planning Officer", sessionToken) {
     const payload = toConvexProposal(proposal);
-    return this.assertClient().mutation(anyApi.proposals.upsert, { proposal: payload, actor });
+    return this.assertClient().mutation(anyApi.proposals.upsert, { proposal: payload, sessionToken });
   }
 
-  async advancePhaseAsync({ proposalId, toPhase, remarks, actor }) {
-    return this.assertClient().mutation(anyApi.proposals.advancePhase, { proposalId, toPhase, remarks, actor });
+  async advancePhaseAsync({ proposalId, toPhase, remarks, actor, sessionToken }) {
+    return this.assertClient().mutation(anyApi.proposals.advancePhase, { proposalId, toPhase, remarks, sessionToken });
+  }
+
+  async registerBulkSubmissionAsync(submission, sessionToken) {
+    const result = await this.assertClient().mutation(anyApi.imports.registerBulkSubmission, {
+      submissionId: submission.id || submission.submissionId,
+      fiscalYear: String(submission.fiscalYear || ""),
+      sourceFile: submission.sourceFile || submission.fileName || "",
+      program: submission.program || "",
+      office: submission.office || "",
+      templateCode: submission.templateCode || "",
+      phase: submission.phase || "Proposal",
+      status: submission.status || "Preflight Review",
+      remarks: submission.remarks || "",
+      sessionToken,
+    });
+    return { ...submission, ...result };
   }
 
   saveProposal(current, proposal) {

@@ -14,6 +14,10 @@ if (!convexUrl) {
 
 const master = seedData.masterData;
 const client = new ConvexHttpClient(convexUrl);
+const login = await client.mutation(anyApi.auth.login, {
+  name: process.env.PLAN_BUDGET_ADMIN_USER || "System Admin",
+  password: process.env.PLAN_BUDGET_ADMIN_PASSWORD || "PlanBudget2027!",
+}).catch(() => ({ sessionToken: undefined }));
 
 const result = await client.mutation(anyApi.seed.seedMasterData, {
   users: seedData.users.map((user) => ({
@@ -33,6 +37,7 @@ const result = await client.mutation(anyApi.seed.seedMasterData, {
   expenseClasses: master.expenseClasses,
   climateTags: master.climateTags,
   gedsiTags: master.gedsiTags,
+  sessionToken: login.sessionToken,
 });
 
 console.log("Convex master data seed completed:");

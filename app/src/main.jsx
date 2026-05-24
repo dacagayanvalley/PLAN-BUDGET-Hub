@@ -166,11 +166,20 @@ function readSavedUser() {
   }
 }
 
+function readSavedSessionToken() {
+  try {
+    return window.localStorage.getItem("planBudgetSession") || "";
+  } catch {
+    return "";
+  }
+}
+
 function App() {
   const [active, setActiveState] = useState(() => window.location.hash.replace("#", "") || "dashboard");
   const [data, setData] = useState(() => repo.loadAll());
   const [loadState, setLoadState] = useState({ status: ["google", "convex"].includes(dataMode) ? "loading" : "ready", error: "" });
   const [currentUser, setCurrentUser] = useState(() => readSavedUser());
+  const [sessionToken, setSessionToken] = useState(() => readSavedSessionToken());
   const [filters, setFilters] = useState({
     fiscalYear: "2027",
     program: "All",
@@ -179,6 +188,7 @@ function App() {
   });
   const [selectedProposalId, setSelectedProposalId] = useState(data.proposals[0]?.id);
   const [saveNotice, setSaveNotice] = useState("");
+  const isAuthenticated = Boolean(currentUser && (dataMode !== "convex" || sessionToken));
   const access = currentUser ? (accessProfiles[normalizeAccessRole(currentUser.role)] || accessProfiles["Read-only Viewer"]) : activeAccess(data);
   const visibleNavItems = useMemo(() => navItems.filter((item) => canAccessNav(item, access)), [access]);
   const setActive = (id) => {
@@ -197,10 +207,12 @@ function App() {
       },
     };
   };
-  const signIn = (user) => {
+  const signIn = ({ user, sessionToken: nextSessionToken }) => {
     const normalized = { ...user, role: normalizeAccessRole(user.role) };
     window.localStorage.setItem("planBudgetUser", JSON.stringify(normalized));
+    if (nextSessionToken) window.localStorage.setItem("planBudgetSession", nextSessionToken);
     setCurrentUser(normalized);
+    setSessionToken(nextSessionToken || "");
     setData((current) => ({ ...current, session: { user: normalized.name, role: normalized.role, office: normalized.office || "" } }));
     const nextAccess = accessProfiles[normalized.role] || accessProfiles["Read-only Viewer"];
     const firstNav = navItems.find((item) => canAccessNav(item, nextAccess))?.id || "dashboard";
@@ -208,16 +220,20 @@ function App() {
     window.location.hash = firstNav;
   };
   const signOut = () => {
+    if (dataMode === "convex" && sessionToken) repo.logoutAsync?.(sessionToken).catch(() => undefined);
     window.localStorage.removeItem("planBudgetUser");
+    window.localStorage.removeItem("planBudgetSession");
     setCurrentUser(null);
+    setSessionToken("");
     setData((current) => ({ ...current, session: { user: "", role: "" } }));
     window.location.hash = "";
   };
 
   const reloadProductionData = () => {
     if (!["google", "convex"].includes(dataMode)) return undefined;
+    if (dataMode === "convex" && !sessionToken) return undefined;
     setLoadState({ status: "loading", error: "" });
-    return repo.loadAllAsync({ fiscalYear: filters.fiscalYear })
+    return repo.loadAllAsync({ fiscalYear: filters.fiscalYear, sessionToken })
       .then((nextData) => {
         setData(applySessionUser(nextData));
         setSelectedProposalId(nextData.proposals[0]?.id);
@@ -231,8 +247,21 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     if (!["google", "convex"].includes(dataMode)) return undefined;
+    if (dataMode === "convex" && !sessionToken) {
+      repo.loadLoginUsersAsync?.()
+        .then((users) => {
+          if (!cancelled) setData((current) => ({ ...current, users: users || [] }));
+        })
+        .catch((error) => {
+          if (!cancelled) setLoadState({ status: "error", error: error.message });
+        });
+      setLoadState({ status: "ready", error: "" });
+      return () => {
+        cancelled = true;
+      };
+    }
     setLoadState({ status: "loading", error: "" });
-    repo.loadAllAsync({ fiscalYear: filters.fiscalYear })
+    repo.loadAllAsync({ fiscalYear: filters.fiscalYear, sessionToken })
       .then((nextData) => {
         if (cancelled) return;
         setData(applySessionUser(nextData));
@@ -246,7 +275,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [filters.fiscalYear, currentUser?.name]);
+  }, [filters.fiscalYear, currentUser?.name, sessionToken]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -278,8 +307,8 @@ function App() {
     });
   }, [data.proposals, filters]);
 
-  if (!currentUser) {
-    return <LoginScreen data={data} loadState={loadState} onLogin={signIn} />;
+  if (!isAuthenticated) {
+    return <LoginScreen data={data} loadState={loadState} onLogin={signIn} repo={repo} dataMode={dataMode} />;
   }
 
   const upsertProposal = (proposal) => {
@@ -296,7 +325,7 @@ function App() {
     const result = validateProposal(next, data);
     next.validationStatus = result.issues.length ? "Needs Correction" : "Validated";
     if (["google", "convex"].includes(dataMode)) {
-      repo.saveProposalAsync(next, data.session.user)
+      repo.saveProposalAsync(next, data.session.user, sessionToken)
         .then(() => {
           setData((current) => repo.saveProposal(current, next));
           setSelectedProposalId("__new__");
@@ -320,7 +349,7 @@ function App() {
       validationStatus: toPhase === "Monitoring and Evaluation" ? "Approved" : proposal.validationStatus,
     };
     if (dataMode === "convex") {
-      repo.advancePhaseAsync({ proposalId: proposal.id, toPhase, remarks, actor: data.session.user })
+      repo.advancePhaseAsync({ proposalId: proposal.id, toPhase, remarks, actor: data.session.user, sessionToken })
         .then(() => reloadProductionData())
         .then(() => flashSaveNotice(setSaveNotice, `${proposal.id} moved to ${toPhase}.`))
         .catch((error) => setLoadState({ status: "error", error: error.message }));
@@ -372,11 +401,11 @@ function App() {
       }));
       return;
     }
-    if (dataMode === "google") {
-      repo.registerBulkSubmissionAsync(next)
+    if (dataMode === "google" || dataMode === "convex") {
+      repo.registerBulkSubmissionAsync(next, sessionToken)
         .then((saved) => setData((current) => ({
           ...current,
-          bulkSubmissions: [saved, ...(current.bulkSubmissions || [])],
+          bulkSubmissions: [saved || next, ...(current.bulkSubmissions || [])],
         })))
         .catch((error) => setLoadState({ status: "error", error: error.message }));
       return;
@@ -467,7 +496,7 @@ function App() {
   );
 }
 
-function LoginScreen({ data, loadState, onLogin }) {
+function LoginScreen({ data, loadState, onLogin, repo, dataMode }) {
   const users = useMemo(() => {
     const source = data.users?.length ? data.users : [
       { name: "System Admin", role: "Admin", office: "RICT" },
@@ -479,11 +508,29 @@ function LoginScreen({ data, loadState, onLogin }) {
     return source.map((user) => ({ ...user, role: normalizeAccessRole(user.role) }));
   }, [data.users]);
   const [selectedName, setSelectedName] = useState(users[0]?.name || "");
+  const [password, setPassword] = useState("");
+  const [loginState, setLoginState] = useState({ status: "idle", error: "" });
   useEffect(() => {
     if (!selectedName && users[0]?.name) setSelectedName(users[0].name);
   }, [users, selectedName]);
   const selectedUser = users.find((user) => user.name === selectedName) || users[0];
   const selectedAccess = accessProfiles[selectedUser?.role] || accessProfiles["Read-only Viewer"];
+  const submitLogin = () => {
+    if (!selectedUser) return;
+    if (dataMode !== "convex") {
+      onLogin({ user: selectedUser, sessionToken: "" });
+      return;
+    }
+    setLoginState({ status: "loading", error: "" });
+    repo.loginAsync({ name: selectedUser.name, password })
+      .then((result) => {
+        setLoginState({ status: "idle", error: "" });
+        onLogin(result);
+      })
+      .catch((error) => {
+        setLoginState({ status: "error", error: error.message });
+      });
+  };
 
   return (
     <main className="login-page">
@@ -497,10 +544,11 @@ function LoginScreen({ data, loadState, onLogin }) {
         </div>
         <div className="login-copy">
           <h2>Sign in to continue</h2>
-          <p>Select your authorized account. Privileges are applied immediately after login.</p>
+          <p>Use your authorized account password. Privileges are verified by Convex before database access is allowed.</p>
         </div>
         {loadState.status === "loading" && <div className="mode-banner">Loading authorized user accounts from Convex...</div>}
         {loadState.status === "error" && <div className="mode-banner error">{loadState.error}</div>}
+        {loginState.status === "error" && <div className="mode-banner error">{loginState.error}</div>}
         <label className="field">
           <span>User account</span>
           <select value={selectedName} onChange={(event) => setSelectedName(event.target.value)}>
@@ -509,6 +557,21 @@ function LoginScreen({ data, loadState, onLogin }) {
             ))}
           </select>
         </label>
+        {dataMode === "convex" && (
+          <label className="field">
+            <span>Password</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") submitLogin();
+              }}
+              placeholder="Enter account password"
+              autoComplete="current-password"
+            />
+          </label>
+        )}
         <div className="login-access-card">
           <strong>{selectedAccess.label}</strong>
           <span>{selectedUser?.office || "No office assigned"}</span>
@@ -516,8 +579,8 @@ function LoginScreen({ data, loadState, onLogin }) {
             {selectedAccess.rights.map((right) => <li key={right}>{right}</li>)}
           </ul>
         </div>
-        <button className="primary login-button" disabled={!selectedUser} onClick={() => onLogin(selectedUser)}>
-          <ShieldCheck size={18} /> Login
+        <button className="primary login-button" disabled={!selectedUser || loginState.status === "loading" || (dataMode === "convex" && !password)} onClick={submitLogin}>
+          <ShieldCheck size={18} /> {loginState.status === "loading" ? "Signing in..." : "Login"}
         </button>
       </section>
     </main>
