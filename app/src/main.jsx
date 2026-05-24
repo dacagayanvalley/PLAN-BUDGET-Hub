@@ -15,6 +15,7 @@ import {
   History,
   Layers3,
   ListChecks,
+  LogOut,
   MapPinned,
   PenLine,
   Plus,
@@ -40,6 +41,9 @@ const accessProfiles = {
   Admin: {
     label: "Admin",
     rights: ["Full database access", "Master data management", "Validate and move PAPs across phases", "All dashboards and reports"],
+    allowedNav: "all",
+    canViewDashboard: true,
+    canViewRecords: true,
     canEncode: true,
     canValidate: true,
     canAdvance: true,
@@ -48,7 +52,10 @@ const accessProfiles = {
   },
   "Planning Officer": {
     label: "Planning Officer",
-    rights: ["Encode PAP records", "Validate proposal, NEP, and GAA records", "Generate reporting templates"],
+    rights: ["Encode and edit PAP records", "Validate Proposal, NEP, and GAA records", "Generate reporting templates"],
+    allowedNav: "all",
+    canViewDashboard: true,
+    canViewRecords: true,
     canEncode: true,
     canValidate: true,
     canAdvance: true,
@@ -57,48 +64,66 @@ const accessProfiles = {
   },
   "Program Officer": {
     label: "Program Officer",
-    rights: ["Encode assigned program PAPs", "Upload supporting details", "Generate assigned reports"],
-    canEncode: true,
+    rights: ["View assigned program records", "Review validation status", "Read-only supporting details"],
+    allowedNav: ["dashboard", "review", "validation", "consolidation", "repository", "help"],
+    canViewDashboard: true,
+    canViewRecords: true,
+    canEncode: false,
     canValidate: false,
     canAdvance: false,
-    canReport: true,
+    canReport: false,
     canManageMasterData: false,
   },
   Management: {
     label: "Management",
-    rights: ["Dashboard access", "Management reports", "Read-only record view"],
+    rights: ["Dashboard access", "Read-only record view", "Management summaries"],
+    allowedNav: ["dashboard", "review", "consolidation", "reports", "help"],
+    canViewDashboard: true,
+    canViewRecords: true,
     canEncode: false,
     canValidate: false,
     canAdvance: false,
-    canReport: true,
+    canReport: false,
     canManageMasterData: false,
   },
   "Read-only Viewer": {
     label: "Read-only Viewer",
-    rights: ["Read-only dashboards and generated reports"],
+    rights: ["Read-only dashboards", "Read-only record lists"],
+    allowedNav: ["dashboard", "review", "help"],
+    canViewDashboard: true,
+    canViewRecords: true,
     canEncode: false,
     canValidate: false,
     canAdvance: false,
-    canReport: true,
+    canReport: false,
     canManageMasterData: false,
   },
 };
 
+function normalizeAccessRole(role) {
+  const value = String(role || "").toLowerCase();
+  if (value.includes("admin") || value.includes("system")) return "Admin";
+  if (value.includes("planning") || value.includes("pmed") || value.includes("pips") || value.includes("budget") || value.includes("reviewer")) return "Planning Officer";
+  if (value.includes("program") || value.includes("encoder")) return "Program Officer";
+  if (value.includes("management") || value.includes("viewer")) return "Management";
+  return "Read-only Viewer";
+}
+
 function activeAccess(data) {
-  return accessProfiles[data.session?.role] || accessProfiles["Read-only Viewer"];
+  return accessProfiles[normalizeAccessRole(data.session?.role)] || accessProfiles["Read-only Viewer"];
 }
 
 const navItems = [
-  { id: "dashboard", label: "Dashboard", icon: BarChart3 },
-  { id: "intake", label: "Proposal Intake", icon: PenLine },
-  { id: "review", label: "Record Review", icon: ShieldCheck },
-  { id: "bulk", label: "Bulk Excel Submission", icon: UploadCloud },
-  { id: "master", label: "Master Data", icon: Database },
-  { id: "validation", label: "Validation", icon: ListChecks },
-  { id: "consolidation", label: "Consolidation", icon: TableProperties },
-  { id: "phases", label: "Phase Tracking", icon: History },
-  { id: "reports", label: "Reports", icon: FileSpreadsheet },
-  { id: "repository", label: "MOV Repository", icon: FolderKanban },
+  { id: "dashboard", label: "Dashboard", icon: BarChart3, permission: "canViewDashboard" },
+  { id: "intake", label: "Proposal Intake", icon: PenLine, permission: "canEncode" },
+  { id: "review", label: "Record Review", icon: ShieldCheck, permission: "canViewRecords" },
+  { id: "bulk", label: "Bulk Excel Submission", icon: UploadCloud, permission: "canEncode" },
+  { id: "master", label: "Master Data", icon: Database, permission: "canManageMasterData" },
+  { id: "validation", label: "Validation", icon: ListChecks, permission: "canViewRecords" },
+  { id: "consolidation", label: "Consolidation", icon: TableProperties, permission: "canViewDashboard" },
+  { id: "phases", label: "Phase Tracking", icon: History, permission: "canAdvance" },
+  { id: "reports", label: "Reports", icon: FileSpreadsheet, permission: "canReport" },
+  { id: "repository", label: "MOV Repository", icon: FolderKanban, permission: "canViewRecords" },
   { id: "help", label: "Help", icon: BookOpen },
 ];
 
@@ -125,10 +150,27 @@ const climateRationaleOptions = [
   "Not climate tagged.",
 ];
 
+function canAccessNav(item, access) {
+  if (!item.permission) return true;
+  if (access.allowedNav === "all") return Boolean(access[item.permission]);
+  if (Array.isArray(access.allowedNav) && !access.allowedNav.includes(item.id)) return false;
+  return Boolean(access[item.permission]);
+}
+
+function readSavedUser() {
+  try {
+    const saved = window.localStorage.getItem("planBudgetUser");
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+}
+
 function App() {
   const [active, setActiveState] = useState(() => window.location.hash.replace("#", "") || "dashboard");
   const [data, setData] = useState(() => repo.loadAll());
   const [loadState, setLoadState] = useState({ status: ["google", "convex"].includes(dataMode) ? "loading" : "ready", error: "" });
+  const [currentUser, setCurrentUser] = useState(() => readSavedUser());
   const [filters, setFilters] = useState({
     fiscalYear: "2027",
     program: "All",
@@ -137,9 +179,39 @@ function App() {
   });
   const [selectedProposalId, setSelectedProposalId] = useState(data.proposals[0]?.id);
   const [saveNotice, setSaveNotice] = useState("");
+  const access = currentUser ? (accessProfiles[normalizeAccessRole(currentUser.role)] || accessProfiles["Read-only Viewer"]) : activeAccess(data);
+  const visibleNavItems = useMemo(() => navItems.filter((item) => canAccessNav(item, access)), [access]);
   const setActive = (id) => {
-    setActiveState(id);
-    window.location.hash = id;
+    const target = visibleNavItems.some((item) => item.id === id) ? id : visibleNavItems[0]?.id || "dashboard";
+    setActiveState(target);
+    window.location.hash = target;
+  };
+  const applySessionUser = (nextData) => {
+    if (!currentUser) return nextData;
+    return {
+      ...nextData,
+      session: {
+        user: currentUser.name,
+        role: normalizeAccessRole(currentUser.role),
+        office: currentUser.office || "",
+      },
+    };
+  };
+  const signIn = (user) => {
+    const normalized = { ...user, role: normalizeAccessRole(user.role) };
+    window.localStorage.setItem("planBudgetUser", JSON.stringify(normalized));
+    setCurrentUser(normalized);
+    setData((current) => ({ ...current, session: { user: normalized.name, role: normalized.role, office: normalized.office || "" } }));
+    const nextAccess = accessProfiles[normalized.role] || accessProfiles["Read-only Viewer"];
+    const firstNav = navItems.find((item) => canAccessNav(item, nextAccess))?.id || "dashboard";
+    setActiveState(firstNav);
+    window.location.hash = firstNav;
+  };
+  const signOut = () => {
+    window.localStorage.removeItem("planBudgetUser");
+    setCurrentUser(null);
+    setData((current) => ({ ...current, session: { user: "", role: "" } }));
+    window.location.hash = "";
   };
 
   const reloadProductionData = () => {
@@ -147,7 +219,7 @@ function App() {
     setLoadState({ status: "loading", error: "" });
     return repo.loadAllAsync({ fiscalYear: filters.fiscalYear })
       .then((nextData) => {
-        setData(nextData);
+        setData(applySessionUser(nextData));
         setSelectedProposalId(nextData.proposals[0]?.id);
         setLoadState({ status: "ready", error: "" });
       })
@@ -163,7 +235,7 @@ function App() {
     repo.loadAllAsync({ fiscalYear: filters.fiscalYear })
       .then((nextData) => {
         if (cancelled) return;
-        setData(nextData);
+        setData(applySessionUser(nextData));
         setSelectedProposalId(nextData.proposals[0]?.id);
         setLoadState({ status: "ready", error: "" });
       })
@@ -174,7 +246,24 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [filters.fiscalYear]);
+  }, [filters.fiscalYear, currentUser?.name]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    setData((current) => ({
+      ...current,
+      session: {
+        user: currentUser.name,
+        role: normalizeAccessRole(currentUser.role),
+        office: currentUser.office || "",
+      },
+    }));
+  }, [currentUser?.name]);
+
+  useEffect(() => {
+    if (!visibleNavItems.length) return;
+    if (!visibleNavItems.some((item) => item.id === active)) setActive(visibleNavItems[0].id);
+  }, [active, visibleNavItems]);
 
   const selectedProposal = selectedProposalId === "__new__" ? null : (data.proposals.find((proposal) => proposal.id === selectedProposalId) ?? data.proposals[0]);
   const validationResults = useMemo(() => validateAll(data), [data]);
@@ -189,7 +278,12 @@ function App() {
     });
   }, [data.proposals, filters]);
 
+  if (!currentUser) {
+    return <LoginScreen data={data} loadState={loadState} onLogin={signIn} />;
+  }
+
   const upsertProposal = (proposal) => {
+    if (!access.canEncode && !access.canValidate) return;
     const now = new Date().toISOString();
     const normalized = normalizeDraftProposal(proposal);
     const next = {
@@ -217,6 +311,7 @@ function App() {
   };
 
   const advanceProposalPhase = ({ proposal, toPhase, remarks }) => {
+    if (!access.canAdvance) return;
     const next = {
       ...proposal,
       phase: toPhase,
@@ -303,7 +398,7 @@ function App() {
           </div>
         </div>
         <nav aria-label="Primary">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             return (
               <button
@@ -321,23 +416,27 @@ function App() {
           <ShieldCheck size={18} />
           <div>
             <strong>Storage mode</strong>
-            <span>{dataMode === "google" ? "Production Google Sheets" : dataMode === "demo" ? "Demo training data" : "Empty local setup"}</span>
+            <span>{dataMode === "convex" ? "Production Convex" : dataMode === "google" ? "Production Google Sheets" : dataMode === "demo" ? "Demo training data" : "Empty local setup"}</span>
           </div>
         </div>
+        <button className="nav-item sign-out" onClick={signOut}>
+          <LogOut size={18} />
+          <span>Sign out</span>
+        </button>
       </aside>
 
       <main className="workspace">
         <ProductionBanner dataMode={dataMode} loadState={loadState} />
         {saveNotice && <div className="toast good">{saveNotice}</div>}
         <Header data={data} filters={filters} setFilters={setFilters} onRefresh={reloadProductionData} loadState={loadState} />
-        <AccessBanner data={data} />
+        <AccessBanner data={data} access={access} onSignOut={signOut} />
         {active === "dashboard" && (
           <Dashboard data={data} proposals={filteredProposals} validationResults={validationResults} />
         )}
         {active === "intake" && (
           <ProposalIntake
             data={data}
-            access={activeAccess(data)}
+            access={access}
             proposal={selectedProposal}
             proposals={filteredProposals}
             onSelect={setSelectedProposalId}
@@ -345,9 +444,9 @@ function App() {
             onSave={upsertProposal}
           />
         )}
-        {active === "review" && <RecordReview data={data} access={activeAccess(data)} initialSelectedId={selectedProposalId} onSave={upsertProposal} />}
-        {active === "bulk" && <BulkSubmission data={data} onSubmit={registerBulkSubmission} />}
-        {active === "master" && <MasterData data={data} />}
+        {active === "review" && <RecordReview data={data} access={access} initialSelectedId={selectedProposalId} onSave={upsertProposal} />}
+        {active === "bulk" && access.canEncode && <BulkSubmission data={data} access={access} onSubmit={registerBulkSubmission} />}
+        {active === "master" && access.canManageMasterData && <MasterData data={data} access={access} />}
         {active === "validation" && (
           <Validation
             data={data}
@@ -359,12 +458,69 @@ function App() {
           />
         )}
         {active === "consolidation" && <Consolidation proposals={filteredProposals} />}
-        {active === "phases" && <PhaseTracking data={data} access={activeAccess(data)} proposal={selectedProposal} onAdvance={advanceProposalPhase} />}
-        {active === "reports" && <Reports data={data} proposals={filteredProposals} />}
+        {active === "phases" && <PhaseTracking data={data} access={access} proposal={selectedProposal} onAdvance={advanceProposalPhase} />}
+        {active === "reports" && access.canReport && <Reports data={data} access={access} proposals={filteredProposals} />}
         {active === "repository" && <Repository data={data} proposal={selectedProposal} />}
         {active === "help" && <Help />}
       </main>
     </div>
+  );
+}
+
+function LoginScreen({ data, loadState, onLogin }) {
+  const users = useMemo(() => {
+    const source = data.users?.length ? data.users : [
+      { name: "System Admin", role: "Admin", office: "RICT" },
+      { name: "PMED Reviewer", role: "Planning Officer", office: "PMED" },
+      { name: "Rice Planning Officer", role: "Planning Officer", office: "Rice Program" },
+      { name: "Program Officer", role: "Program Officer", office: "Banner Program" },
+      { name: "Management Viewer", role: "Management", office: "ORD" },
+    ];
+    return source.map((user) => ({ ...user, role: normalizeAccessRole(user.role) }));
+  }, [data.users]);
+  const [selectedName, setSelectedName] = useState(users[0]?.name || "");
+  useEffect(() => {
+    if (!selectedName && users[0]?.name) setSelectedName(users[0].name);
+  }, [users, selectedName]);
+  const selectedUser = users.find((user) => user.name === selectedName) || users[0];
+  const selectedAccess = accessProfiles[selectedUser?.role] || accessProfiles["Read-only Viewer"];
+
+  return (
+    <main className="login-page">
+      <section className="login-panel">
+        <div className="brand-block login-brand">
+          <div className="seal">DA</div>
+          <div>
+            <h1>PLAN-BUDGET Hub</h1>
+            <p>Secure planning and budget database access</p>
+          </div>
+        </div>
+        <div className="login-copy">
+          <h2>Sign in to continue</h2>
+          <p>Select your authorized account. Privileges are applied immediately after login.</p>
+        </div>
+        {loadState.status === "loading" && <div className="mode-banner">Loading authorized user accounts from Convex...</div>}
+        {loadState.status === "error" && <div className="mode-banner error">{loadState.error}</div>}
+        <label className="field">
+          <span>User account</span>
+          <select value={selectedName} onChange={(event) => setSelectedName(event.target.value)}>
+            {users.map((user) => (
+              <option key={user.name} value={user.name}>{user.name} - {user.office || "No office"} - {user.role}</option>
+            ))}
+          </select>
+        </label>
+        <div className="login-access-card">
+          <strong>{selectedAccess.label}</strong>
+          <span>{selectedUser?.office || "No office assigned"}</span>
+          <ul>
+            {selectedAccess.rights.map((right) => <li key={right}>{right}</li>)}
+          </ul>
+        </div>
+        <button className="primary login-button" disabled={!selectedUser} onClick={() => onLogin(selectedUser)}>
+          <ShieldCheck size={18} /> Login
+        </button>
+      </section>
+    </main>
   );
 }
 
@@ -482,17 +638,17 @@ function ProductionBanner({ dataMode, loadState }) {
   return <div className="mode-banner good">Production mode connected to Google Sheets.</div>;
 }
 
-function AccessBanner({ data }) {
-  const access = activeAccess(data);
+function AccessBanner({ data, access, onSignOut }) {
   return (
     <div className="access-banner">
       <div>
         <strong>{access.label}</strong>
-        <span>{data.session?.user || "Current user"}</span>
+        <span>{data.session?.user || "Current user"}{data.session?.office ? ` - ${data.session.office}` : ""}</span>
       </div>
       <ul>
         {access.rights.map((right) => <li key={right}>{right}</li>)}
       </ul>
+      <button className="ghost" onClick={onSignOut}><LogOut size={15} /> Sign out</button>
     </div>
   );
 }
@@ -697,7 +853,7 @@ function RecordReview({ data, access, initialSelectedId, onSave }) {
         </div>
         <DataTable
           rows={rows}
-          onRowClick={(row) => setSelectedId(row.id)}
+          onRowClick={openRecord}
           onRowDoubleClick={openRecord}
           selectedId={selectedId}
           columns={[
@@ -958,7 +1114,7 @@ function normalizeDraftProposal(proposal) {
   };
 }
 
-function MasterData({ data }) {
+function MasterData({ data, access }) {
   const sets = [
     ["Users and roles", data.users.map((u) => ({ name: u.name, role: u.role, office: u.office }))],
     ["Municipality-district map", data.masterData.municipalities],
@@ -972,7 +1128,7 @@ function MasterData({ data }) {
   return (
     <section className="content-stack">
       {sets.map(([title, rows]) => (
-        <Panel key={title} title={title} icon={Settings} action={<button className="ghost"><Plus size={16} /> Add</button>}>
+        <Panel key={title} title={title} icon={Settings} action={access?.canManageMasterData && <button className="ghost"><Plus size={16} /> Add</button>}>
           <pre className="json-card">{JSON.stringify(rows, null, 2)}</pre>
         </Panel>
       ))}
@@ -1336,27 +1492,92 @@ function BarList({ title, rows }) {
 }
 
 function DataTable({ rows, columns, formatters = {}, onRowClick, onRowDoubleClick, selectedId }) {
+  const [sort, setSort] = useState({ key: columns[0]?.[0] || "", direction: "asc" });
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(0);
+  useEffect(() => {
+    setPage(0);
+  }, [rows, pageSize, sort.key, sort.direction]);
+  const sortedRows = useMemo(() => {
+    if (!sort.key) return rows;
+    return [...rows].sort((a, b) => compareValues(a?.[sort.key], b?.[sort.key], sort.direction));
+  }, [rows, sort]);
+  const pageCount = Math.max(1, Math.ceil(sortedRows.length / pageSize));
+  const safePage = Math.min(page, pageCount - 1);
+  const visibleRows = sortedRows.slice(safePage * pageSize, safePage * pageSize + pageSize);
+  const toggleSort = (key) => {
+    setSort((current) => ({
+      key,
+      direction: current.key === key && current.direction === "asc" ? "desc" : "asc",
+    }));
+  };
+
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>{columns.map(([, label]) => <th key={label}>{label}</th>)}</tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => (
-            <tr
-              key={row.id || row.label || index}
-              onClick={() => onRowClick?.(row)}
-              onDoubleClick={() => onRowDoubleClick?.(row)}
-              className={selectedId === row.id ? "selected" : ""}
-            >
-              {columns.map(([key]) => <td key={key}>{formatters[key] ? formatters[key](row[key], row) : row[key]}</td>)}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <>
+      <div className="table-toolbar">
+        <span>{sortedRows.length.toLocaleString()} records</span>
+        <label>
+          Rows
+          <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
+            {[5, 10, 15, 20].map((size) => <option key={size} value={size}>{size}</option>)}
+          </select>
+        </label>
+        <div className="pager">
+          <button className="ghost" disabled={safePage === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}>Previous</button>
+          <span>Page {safePage + 1} of {pageCount}</span>
+          <button className="ghost" disabled={safePage >= pageCount - 1} onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}>Next</button>
+        </div>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>{columns.map(([key, label]) => (
+              <th key={label}>
+                <button className="sort-button" onClick={() => toggleSort(key)}>
+                  {label}
+                  <span>{sort.key === key ? (sort.direction === "asc" ? "A-Z" : "Z-A") : "Sort"}</span>
+                </button>
+              </th>
+            ))}</tr>
+          </thead>
+          <tbody>
+            {visibleRows.map((row, index) => (
+              <tr
+                key={row.id || row.label || `${safePage}-${index}`}
+                onClick={() => onRowClick?.(row)}
+                onDoubleClick={() => onRowDoubleClick?.(row)}
+                className={selectedId === row.id ? "selected" : ""}
+              >
+                {columns.map(([key]) => <td key={key}>{formatters[key] ? formatters[key](row[key], row) : row[key]}</td>)}
+              </tr>
+            ))}
+            {!visibleRows.length && (
+              <tr>
+                <td colSpan={columns.length}>No records to show.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
+}
+
+function compareValues(a, b, direction) {
+  const multiplier = direction === "asc" ? 1 : -1;
+  const left = normalizeSortValue(a);
+  const right = normalizeSortValue(b);
+  if (typeof left === "number" && typeof right === "number") return (left - right) * multiplier;
+  return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" }) * multiplier;
+}
+
+function normalizeSortValue(value) {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "number") return value;
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (typeof value === "object") return value.label || value.name || value.id || JSON.stringify(value);
+  const numeric = Number(String(value).replace(/[,\s]/g, ""));
+  return Number.isFinite(numeric) && String(value).match(/\d/) ? numeric : String(value);
 }
 
 function StatusBadge({ value }) {
