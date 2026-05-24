@@ -98,6 +98,175 @@ export const adminResetPassword = mutation({
   },
 });
 
+export const adminCreateUser = mutation({
+  args: {
+    sessionToken: v.string(),
+    name: v.string(),
+    email: v.optional(v.string()),
+    role: v.string(),
+    office: v.optional(v.string()),
+    status: v.optional(v.string()),
+    password: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (args.password.length < 8) throw new Error("Password must be at least 8 characters.");
+    const admin = await requireRole(ctx, args.sessionToken, ["Admin"]);
+    const now = Date.now();
+    const name = args.name.trim();
+    if (!name) throw new Error("User name is required.");
+    const existingByName = await ctx.db.query("users").withIndex("by_name", (q) => q.eq("name", name)).first();
+    if (existingByName) throw new Error(`${name} already exists.`);
+    if (args.email) {
+      const existingByEmail = await ctx.db.query("users").withIndex("by_email", (q) => q.eq("email", args.email)).first();
+      if (existingByEmail) throw new Error(`${args.email} is already used by another user.`);
+    }
+    const userId = await ctx.db.insert("users", {
+      name,
+      email: args.email || undefined,
+      role: args.role,
+      office: args.office || undefined,
+      status: args.status || "Active",
+      passwordHash: await hashPassword(args.password),
+      createdAt: now,
+      updatedAt: now,
+      createdBy: admin.publicUser.name,
+      updatedBy: admin.publicUser.name,
+    });
+    await ctx.db.insert("auditLogs", {
+      entityType: "user",
+      entityId: String(userId),
+      action: "create_user",
+      actor: admin.publicUser.name,
+      summary: `Created user ${name}.`,
+      createdAt: now,
+    });
+    return { ok: true, user: publicUser(await ctx.db.get(userId)) };
+  },
+});
+
+export const adminUpdateUser = mutation({
+  args: {
+    sessionToken: v.string(),
+    userId: v.id("users"),
+    name: v.string(),
+    email: v.optional(v.string()),
+    role: v.string(),
+    office: v.optional(v.string()),
+    status: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const admin = await requireRole(ctx, args.sessionToken, ["Admin"]);
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User was not found.");
+    const name = args.name.trim();
+    if (!name) throw new Error("User name is required.");
+    const existingByName = await ctx.db.query("users").withIndex("by_name", (q) => q.eq("name", name)).first();
+    if (existingByName && existingByName._id !== user._id) throw new Error(`${name} already exists.`);
+    if (args.email) {
+      const existingByEmail = await ctx.db.query("users").withIndex("by_email", (q) => q.eq("email", args.email)).first();
+      if (existingByEmail && existingByEmail._id !== user._id) throw new Error(`${args.email} is already used by another user.`);
+    }
+    const now = Date.now();
+    await ctx.db.patch(user._id, {
+      name,
+      email: args.email || undefined,
+      role: args.role,
+      office: args.office || undefined,
+      status: args.status,
+      updatedAt: now,
+      updatedBy: admin.publicUser.name,
+    });
+    if (args.status !== "Active") {
+      const sessions = await ctx.db.query("userSessions").withIndex("by_userId", (q) => q.eq("userId", user._id)).collect();
+      await Promise.all(sessions.map((row) => ctx.db.delete(row._id)));
+    }
+    await ctx.db.insert("auditLogs", {
+      entityType: "user",
+      entityId: String(user._id),
+      action: "update_user",
+      actor: admin.publicUser.name,
+      summary: `Updated user ${name}.`,
+      createdAt: now,
+    });
+    return { ok: true, user: publicUser(await ctx.db.get(user._id)) };
+  },
+});
+
+export const adminSetUserStatus = mutation({
+  args: {
+    sessionToken: v.string(),
+    userId: v.id("users"),
+    status: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const admin = await requireRole(ctx, args.sessionToken, ["Admin"]);
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User was not found.");
+    const now = Date.now();
+    await ctx.db.patch(user._id, {
+      status: args.status,
+      updatedAt: now,
+      updatedBy: admin.publicUser.name,
+    });
+    if (args.status !== "Active") {
+      const sessions = await ctx.db.query("userSessions").withIndex("by_userId", (q) => q.eq("userId", user._id)).collect();
+      await Promise.all(sessions.map((row) => ctx.db.delete(row._id)));
+    }
+    await ctx.db.insert("auditLogs", {
+      entityType: "user",
+      entityId: String(user._id),
+      action: args.status === "Active" ? "reactivate_user" : "deactivate_user",
+      actor: admin.publicUser.name,
+      summary: `${args.status === "Active" ? "Reactivated" : "Deactivated"} ${user.name}.`,
+      createdAt: now,
+    });
+    return { ok: true, user: publicUser(await ctx.db.get(user._id)) };
+  },
+});
+
+export const adminCreateOfficeUsers = mutation({
+  args: {
+    sessionToken: v.string(),
+    password: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (args.password.length < 8) throw new Error("Password must be at least 8 characters.");
+    const admin = await requireRole(ctx, args.sessionToken, ["Admin"]);
+    const offices = await ctx.db.query("masterItems").withIndex("by_type", (q) => q.eq("type", "office")).collect();
+    const users = await ctx.db.query("users").collect();
+    const existingOfficeKeys = new Set(users.map((user) => normalizeKey(user.office)));
+    const now = Date.now();
+    const created = [];
+    for (const office of offices) {
+      const officeName = office.name.trim();
+      if (!officeName || existingOfficeKeys.has(normalizeKey(officeName))) continue;
+      const name = `${officeName} Account`;
+      const userId = await ctx.db.insert("users", {
+        name,
+        role: inferOfficeRole(officeName),
+        office: officeName,
+        status: "Active",
+        passwordHash: await hashPassword(args.password),
+        createdAt: now,
+        updatedAt: now,
+        createdBy: admin.publicUser.name,
+        updatedBy: admin.publicUser.name,
+      });
+      created.push(publicUser(await ctx.db.get(userId)));
+      existingOfficeKeys.add(normalizeKey(officeName));
+    }
+    await ctx.db.insert("auditLogs", {
+      entityType: "user",
+      entityId: "office-user-batch",
+      action: "create_office_users",
+      actor: admin.publicUser.name,
+      summary: `Created ${created.length} missing office user account(s).`,
+      createdAt: now,
+    });
+    return { ok: true, created };
+  },
+});
+
 export const requestPasswordReset = mutation({
   args: {
     name: v.string(),
@@ -122,6 +291,18 @@ export const requestPasswordReset = mutation({
     return { ok: true, requestId, status: "Open" };
   },
 });
+
+function inferOfficeRole(office: string) {
+  const value = office.toLowerCase();
+  if (value.includes("pmed") || value.includes("planning") || value.includes("budget")) return "Planning Officer";
+  if (value.includes("ord") || value.includes("management")) return "Management";
+  if (value.includes("rict") || value.includes("admin")) return "Admin";
+  return "Program Officer";
+}
+
+function normalizeKey(value: unknown) {
+  return String(value || "").trim().toLowerCase();
+}
 
 export const listPasswordResetRequests = query({
   args: { sessionToken: v.string() },

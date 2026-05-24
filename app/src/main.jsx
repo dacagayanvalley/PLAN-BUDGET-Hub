@@ -511,8 +511,8 @@ function App() {
             repo={repo}
             sessionToken={sessionToken}
             passwordResetRequests={passwordResetRequests}
-            onPasswordReset={() => {
-              flashSaveNotice(setSaveNotice, "User password reset.");
+            onPasswordReset={(message = "User account updated.") => {
+              flashSaveNotice(setSaveNotice, message);
               return loadPasswordResetRequests().then(() => reloadProductionData());
             }}
             onError={(error) => setLoadState({ status: "error", error: error.message })}
@@ -1305,6 +1305,7 @@ function MasterData({ data, access, dataMode, repo, sessionToken, passwordResetR
     <section className="content-stack">
       <UserPasswordAdmin
         users={data.users}
+        offices={data.masterData.offices}
         resetRequests={passwordResetRequests}
         dataMode={dataMode}
         repo={repo}
@@ -1321,17 +1322,68 @@ function MasterData({ data, access, dataMode, repo, sessionToken, passwordResetR
   );
 }
 
-function UserPasswordAdmin({ users = [], resetRequests = [], dataMode, repo, sessionToken, onPasswordReset, onError }) {
+function UserPasswordAdmin({ users = [], offices = [], resetRequests = [], dataMode, repo, sessionToken, onPasswordReset, onError }) {
+  const blankUser = useMemo(() => ({
+    _id: "",
+    name: "",
+    email: "",
+    role: "Program Officer",
+    office: "",
+    status: "Active",
+    password: "PlanBudget2027!",
+  }), []);
   const [selectedUserId, setSelectedUserId] = useState(users[0]?._id || "");
+  const [userForm, setUserForm] = useState(blankUser);
   const [newPassword, setNewPassword] = useState("");
+  const [officePassword, setOfficePassword] = useState("PlanBudget2027!");
   const [requestId, setRequestId] = useState("");
   const [status, setStatus] = useState("idle");
+  const [batchStatus, setBatchStatus] = useState("idle");
   useEffect(() => {
     if (!selectedUserId && users[0]?._id) setSelectedUserId(users[0]._id);
   }, [users, selectedUserId]);
   const selectedUser = users.find((user) => user._id === selectedUserId) || users[0];
+  useEffect(() => {
+    if (selectedUser) setUserForm({ ...blankUser, ...selectedUser, password: "" });
+  }, [selectedUser?._id]);
   const openRequests = resetRequests.filter((request) => request.status === "Open");
-  const submit = () => {
+  const updateUserForm = (field, value) => setUserForm((current) => ({ ...current, [field]: value }));
+  const startNewUser = () => {
+    setSelectedUserId("");
+    setUserForm(blankUser);
+    setNewPassword("");
+    setRequestId("");
+  };
+  const saveUser = () => {
+    if (dataMode !== "convex") return;
+    setStatus("loading");
+    const action = userForm._id
+      ? repo.adminUpdateUserAsync({ sessionToken, user: userForm })
+      : repo.adminCreateUserAsync({ sessionToken, user: userForm });
+    action
+      .then(() => {
+        setStatus("idle");
+        onPasswordReset?.();
+      })
+      .catch((error) => {
+        setStatus("idle");
+        onError?.(error);
+      });
+  };
+  const setUserStatus = (user, nextStatus) => {
+    if (dataMode !== "convex" || !user?._id) return;
+    setStatus("loading");
+    repo.adminSetUserStatusAsync({ sessionToken, userId: user._id, status: nextStatus })
+      .then(() => {
+        setStatus("idle");
+        onPasswordReset?.();
+      })
+      .catch((error) => {
+        setStatus("idle");
+        onError?.(error);
+      });
+  };
+  const resetPassword = () => {
     if (dataMode !== "convex" || !selectedUser?._id) return;
     setStatus("loading");
     repo.adminResetPasswordAsync({ sessionToken, userId: selectedUser._id, newPassword, requestId: requestId || undefined })
@@ -1346,10 +1398,99 @@ function UserPasswordAdmin({ users = [], resetRequests = [], dataMode, repo, ses
         onError?.(error);
       });
   };
+  const createMissingOfficeUsers = () => {
+    if (dataMode !== "convex") return;
+    setBatchStatus("loading");
+    repo.adminCreateOfficeUsersAsync({ sessionToken, password: officePassword })
+      .then((result) => {
+        setBatchStatus("idle");
+        onPasswordReset?.(`${result.created?.length || 0} office account(s) created.`);
+      })
+      .catch((error) => {
+        setBatchStatus("idle");
+        onError?.(error);
+      });
+  };
+  const officeOptions = [...new Set([...offices, ...users.map((user) => user.office)].filter(Boolean))];
+  const roleOptions = ["Admin", "Planning Officer", "Program Officer", "Management", "Read-only Viewer"];
+  const statusOptions = ["Active", "Inactive"];
   return (
-    <Panel title="Users, Roles, and Password Reset" icon={Users}>
+    <Panel title="User Account Management" icon={Users} action={<button className="ghost" onClick={startNewUser}><Plus size={16} /> Add user</button>}>
+      <div className="user-admin-grid">
+        <div className="user-editor-card">
+          <h4>{userForm._id ? "Edit user account" : "Add user account"}</h4>
+          <label className="field">
+            <span>Full name / account name</span>
+            <input value={userForm.name} onChange={(event) => updateUserForm("name", event.target.value)} />
+          </label>
+          <label className="field">
+            <span>Email</span>
+            <input type="email" value={userForm.email || ""} onChange={(event) => updateUserForm("email", event.target.value)} />
+          </label>
+          <label className="field">
+            <span>Office</span>
+            <input list="office-options" value={userForm.office || ""} onChange={(event) => updateUserForm("office", event.target.value)} />
+            <datalist id="office-options">
+              {[...new Set([...officeOptions, "Corn Program", "Livestock Program", "HVCDP", "FMRDP", "Organic Agriculture Program", "Rice Program", "PMED", "Budget Division", "ORD"])].map((office) => <option key={office} value={office} />)}
+            </datalist>
+          </label>
+          <label className="field">
+            <span>Role</span>
+            <select value={userForm.role} onChange={(event) => updateUserForm("role", event.target.value)}>
+              {roleOptions.map((role) => <option key={role}>{role}</option>)}
+            </select>
+          </label>
+          <label className="field">
+            <span>Status</span>
+            <select value={userForm.status || "Active"} onChange={(event) => updateUserForm("status", event.target.value)}>
+              {statusOptions.map((item) => <option key={item}>{item}</option>)}
+            </select>
+          </label>
+          {!userForm._id && (
+            <label className="field">
+              <span>Initial password</span>
+              <input type="password" value={userForm.password || ""} onChange={(event) => updateUserForm("password", event.target.value)} />
+            </label>
+          )}
+          <button className="primary" disabled={dataMode !== "convex" || status === "loading" || !userForm.name || !userForm.role || (!userForm._id && String(userForm.password || "").length < 8)} onClick={saveUser}>
+            {status === "loading" ? "Saving..." : userForm._id ? "Save user changes" : "Create user"}
+          </button>
+          <div className="office-batch-card">
+            <h4>Create missing office accounts</h4>
+            <p className="body-copy">Creates one account for each office without an account. Program offices become Program Officer accounts.</p>
+            <label className="field">
+              <span>Initial password for new office accounts</span>
+              <input type="password" value={officePassword} onChange={(event) => setOfficePassword(event.target.value)} />
+            </label>
+            <button className="ghost" disabled={dataMode !== "convex" || batchStatus === "loading" || officePassword.length < 8} onClick={createMissingOfficeUsers}>
+              {batchStatus === "loading" ? "Creating..." : "Create missing office accounts"}
+            </button>
+          </div>
+        </div>
+        <DataTable
+          rows={users.map((u) => ({ id: u._id || u.name, ...u, status: u.status || "Active" }))}
+          onRowClick={(row) => setSelectedUserId(row._id)}
+          selectedId={selectedUserId}
+          columns={[["name", "Name"], ["role", "Role"], ["office", "Office"], ["status", "Status"], ["actions", "Actions"]]}
+          formatters={{
+            status: (value) => <StatusBadge value={value} />,
+            actions: (_value, row) => (
+              <div className="table-actions">
+                <button className="ghost" onClick={(event) => { event.stopPropagation(); setSelectedUserId(row._id); }}>Edit</button>
+                {row.status === "Active" ? (
+                  <button className="ghost danger" onClick={(event) => { event.stopPropagation(); setUserStatus(row, "Inactive"); }}>Deactivate</button>
+                ) : (
+                  <button className="ghost" onClick={(event) => { event.stopPropagation(); setUserStatus(row, "Active"); }}>Reactivate</button>
+                )}
+              </div>
+            ),
+          }}
+        />
+      </div>
+
       <div className="admin-password-grid">
         <div className="password-form admin-reset-form">
+          <h4>Reset password</h4>
           <label className="field">
             <span>User account</span>
             <select value={selectedUserId} onChange={(event) => setSelectedUserId(event.target.value)}>
@@ -1371,30 +1512,26 @@ function UserPasswordAdmin({ users = [], resetRequests = [], dataMode, repo, ses
               ))}
             </select>
           </label>
-          <button className="primary" disabled={dataMode !== "convex" || status === "loading" || !selectedUser?._id || newPassword.length < 8} onClick={submit}>
+          <button className="primary" disabled={dataMode !== "convex" || status === "loading" || !selectedUser?._id || newPassword.length < 8} onClick={resetPassword}>
             {status === "loading" ? "Resetting..." : "Reset selected password"}
           </button>
         </div>
-        <DataTable
-          rows={users.map((u) => ({ id: u._id || u.name, name: u.name, role: u.role, office: u.office, status: u.status || "Active" }))}
-          columns={[["name", "Name"], ["role", "Role"], ["office", "Office"], ["status", "Status"]]}
-        />
-      </div>
-      <div className="reset-request-block">
-        <h4>Forgot-password requests</h4>
-        <DataTable
-          rows={resetRequests.map((request) => ({
-            id: request._id,
-            name: request.name,
-            office: request.office,
-            status: request.status,
-            requestedAt: formatDateTime(request.requestedAt),
-            resolvedBy: request.resolvedBy || "",
-            note: request.note || "",
-          }))}
-          columns={[["name", "User"], ["office", "Office"], ["status", "Status"], ["requestedAt", "Requested"], ["resolvedBy", "Resolved by"], ["note", "Note"]]}
-          formatters={{ status: (value) => <StatusBadge value={value} /> }}
-        />
+        <div className="reset-request-block">
+          <h4>Forgot-password requests</h4>
+          <DataTable
+            rows={resetRequests.map((request) => ({
+              id: request._id,
+              name: request.name,
+              office: request.office,
+              status: request.status,
+              requestedAt: formatDateTime(request.requestedAt),
+              resolvedBy: request.resolvedBy || "",
+              note: request.note || "",
+            }))}
+            columns={[["name", "User"], ["office", "Office"], ["status", "Status"], ["requestedAt", "Requested"], ["resolvedBy", "Resolved by"], ["note", "Note"]]}
+            formatters={{ status: (value) => <StatusBadge value={value} /> }}
+          />
+        </div>
       </div>
     </Panel>
   );

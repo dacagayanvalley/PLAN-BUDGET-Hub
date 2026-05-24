@@ -33,6 +33,7 @@ export default defineSchema({
     ...auditFields,
   })
     .index("by_email", ["email"])
+    .index("by_name", ["name"])
     .index("by_role", ["role"]),
 
   userSessions: defineTable({

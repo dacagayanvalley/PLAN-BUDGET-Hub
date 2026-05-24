@@ -110,6 +110,22 @@ export class ConvexRepository {
     return this.assertClient().mutation(anyApi.auth.adminResetPassword, { sessionToken, userId, newPassword, requestId });
   }
 
+  async adminCreateUserAsync({ sessionToken, user }) {
+    return this.assertClient().mutation(anyApi.auth.adminCreateUser, userPayload(user, { sessionToken, includePassword: true }));
+  }
+
+  async adminUpdateUserAsync({ sessionToken, user }) {
+    return this.assertClient().mutation(anyApi.auth.adminUpdateUser, userPayload(user, { sessionToken }));
+  }
+
+  async adminSetUserStatusAsync({ sessionToken, userId, status }) {
+    return this.assertClient().mutation(anyApi.auth.adminSetUserStatus, { sessionToken, userId, status });
+  }
+
+  async adminCreateOfficeUsersAsync({ sessionToken, password }) {
+    return this.assertClient().mutation(anyApi.auth.adminCreateOfficeUsers, { sessionToken, password });
+  }
+
   async requestPasswordResetAsync({ name, note }) {
     return this.assertClient().mutation(anyApi.auth.requestPasswordReset, { name, note });
   }
@@ -203,6 +219,19 @@ export class ConvexRepository {
       : [...current.proposals, proposal];
     return { ...current, proposals };
   }
+}
+
+function userPayload(user, { sessionToken, includePassword = false }) {
+  return {
+    sessionToken,
+    ...(user._id ? { userId: user._id } : {}),
+    name: user.name || "",
+    email: user.email || undefined,
+    role: user.role || "Program Officer",
+    office: user.office || undefined,
+    status: user.status || "Active",
+    ...(includePassword ? { password: user.password || "" } : {}),
+  };
 }
 
 export class GoogleSheetsRepository {

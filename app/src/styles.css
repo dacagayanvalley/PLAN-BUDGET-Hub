@@ -529,6 +529,7 @@ tr.selected td, tbody tr:hover td { background: #f7faf7; }
   grid-template-columns: minmax(320px, .75fr) minmax(0, 1.25fr);
   gap: 14px;
   align-items: start;
+  margin-top: 14px;
 }
 
 .admin-reset-form {
@@ -539,8 +540,56 @@ tr.selected td, tbody tr:hover td { background: #f7faf7; }
   background: #f8faf8;
 }
 
-.reset-request-block { margin-top: 16px; }
-.reset-request-block h4 { margin: 0 0 10px; font-size: 14px; }
+.user-admin-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, .8fr) minmax(0, 1.2fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.user-editor-card,
+.office-batch-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 13px;
+  background: #f8faf8;
+  display: grid;
+  gap: 10px;
+}
+
+.user-editor-card h4,
+.office-batch-card h4,
+.reset-request-block h4,
+.admin-reset-form h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.office-batch-card {
+  margin-top: 6px;
+  background: #fff;
+}
+
+.office-batch-card .body-copy {
+  margin: 0;
+  font-size: 13px;
+}
+
+.reset-request-block {
+  min-width: 0;
+}
+
+.table-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ghost.danger {
+  color: var(--danger);
+  border-color: #f0c4bf;
+  background: #fff7f6;
+}
 
 .toast {
   border: 1px solid #b9dec7;
@@ -624,7 +673,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled {
   .access-banner ul, .phase-action-buttons { justify-content: flex-start; }
   .filter-strip { display: grid; grid-template-columns: 1fr; justify-content: stretch; width: 100%; }
   .field.compact, .field.compact select { width: 100%; min-width: 0; }
-  .password-form, .admin-password-grid { grid-template-columns: 1fr; }
+  .password-form, .admin-password-grid, .user-admin-grid { grid-template-columns: 1fr; }
   .topbar h2 { font-size: 22px; }
   .topbar p { max-width: 100%; }
 }
