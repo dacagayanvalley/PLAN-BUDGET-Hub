@@ -188,6 +188,7 @@ function App() {
   });
   const [selectedProposalId, setSelectedProposalId] = useState(data.proposals[0]?.id);
   const [saveNotice, setSaveNotice] = useState("");
+  const [passwordResetRequests, setPasswordResetRequests] = useState([]);
   const isAuthenticated = Boolean(currentUser && (dataMode !== "convex" || sessionToken));
   const access = currentUser ? (accessProfiles[normalizeAccessRole(currentUser.role)] || accessProfiles["Read-only Viewer"]) : activeAccess(data);
   const visibleNavItems = useMemo(() => navItems.filter((item) => canAccessNav(item, access)), [access]);
@@ -229,6 +230,19 @@ function App() {
     window.location.hash = "";
   };
 
+  const loadPasswordResetRequests = () => {
+    if (dataMode !== "convex" || !sessionToken || normalizeAccessRole(currentUser?.role) !== "Admin") return Promise.resolve([]);
+    return repo.listPasswordResetRequestsAsync(sessionToken)
+      .then((rows) => {
+        setPasswordResetRequests(rows || []);
+        return rows || [];
+      })
+      .catch((error) => {
+        setLoadState({ status: "error", error: error.message });
+        return [];
+      });
+  };
+
   const reloadProductionData = () => {
     if (!["google", "convex"].includes(dataMode)) return undefined;
     if (dataMode === "convex" && !sessionToken) return undefined;
@@ -238,6 +252,7 @@ function App() {
         setData(applySessionUser(nextData));
         setSelectedProposalId(nextData.proposals[0]?.id);
         setLoadState({ status: "ready", error: "" });
+        loadPasswordResetRequests();
       })
       .catch((error) => {
         setLoadState({ status: "error", error: error.message });
@@ -267,6 +282,7 @@ function App() {
         setData(applySessionUser(nextData));
         setSelectedProposalId(nextData.proposals[0]?.id);
         setLoadState({ status: "ready", error: "" });
+        loadPasswordResetRequests();
       })
       .catch((error) => {
         if (cancelled) return;
@@ -276,6 +292,11 @@ function App() {
       cancelled = true;
     };
   }, [filters.fiscalYear, currentUser?.name, sessionToken]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    loadPasswordResetRequests();
+  }, [isAuthenticated, sessionToken, currentUser?.role]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -459,6 +480,13 @@ function App() {
         {saveNotice && <div className="toast good">{saveNotice}</div>}
         <Header data={data} filters={filters} setFilters={setFilters} onRefresh={reloadProductionData} loadState={loadState} />
         <AccessBanner data={data} access={access} onSignOut={signOut} />
+        <AccountSecurity
+          dataMode={dataMode}
+          repo={repo}
+          sessionToken={sessionToken}
+          onChanged={(message) => flashSaveNotice(setSaveNotice, message)}
+          onError={(error) => setLoadState({ status: "error", error: error.message })}
+        />
         {active === "dashboard" && (
           <Dashboard data={data} proposals={filteredProposals} validationResults={validationResults} />
         )}
@@ -475,7 +503,21 @@ function App() {
         )}
         {active === "review" && <RecordReview data={data} access={access} initialSelectedId={selectedProposalId} onSave={upsertProposal} />}
         {active === "bulk" && access.canEncode && <BulkSubmission data={data} access={access} onSubmit={registerBulkSubmission} />}
-        {active === "master" && access.canManageMasterData && <MasterData data={data} access={access} />}
+        {active === "master" && access.canManageMasterData && (
+          <MasterData
+            data={data}
+            access={access}
+            dataMode={dataMode}
+            repo={repo}
+            sessionToken={sessionToken}
+            passwordResetRequests={passwordResetRequests}
+            onPasswordReset={() => {
+              flashSaveNotice(setSaveNotice, "User password reset.");
+              return loadPasswordResetRequests().then(() => reloadProductionData());
+            }}
+            onError={(error) => setLoadState({ status: "error", error: error.message })}
+          />
+        )}
         {active === "validation" && (
           <Validation
             data={data}
@@ -510,6 +552,8 @@ function LoginScreen({ data, loadState, onLogin, repo, dataMode }) {
   const [selectedName, setSelectedName] = useState(users[0]?.name || "");
   const [password, setPassword] = useState("");
   const [loginState, setLoginState] = useState({ status: "idle", error: "" });
+  const [resetNote, setResetNote] = useState("");
+  const [resetState, setResetState] = useState({ status: "idle", message: "" });
   useEffect(() => {
     if (!selectedName && users[0]?.name) setSelectedName(users[0].name);
   }, [users, selectedName]);
@@ -531,6 +575,13 @@ function LoginScreen({ data, loadState, onLogin, repo, dataMode }) {
         setLoginState({ status: "error", error: error.message });
       });
   };
+  const requestReset = () => {
+    if (dataMode !== "convex" || !selectedUser) return;
+    setResetState({ status: "loading", message: "" });
+    repo.requestPasswordResetAsync({ name: selectedUser.name, note: resetNote })
+      .then(() => setResetState({ status: "ready", message: "Password reset request sent to Admin." }))
+      .catch((error) => setResetState({ status: "error", message: error.message }));
+  };
 
   return (
     <main className="login-page">
@@ -549,6 +600,7 @@ function LoginScreen({ data, loadState, onLogin, repo, dataMode }) {
         {loadState.status === "loading" && <div className="mode-banner">Loading authorized user accounts from Convex...</div>}
         {loadState.status === "error" && <div className="mode-banner error">{loadState.error}</div>}
         {loginState.status === "error" && <div className="mode-banner error">{loginState.error}</div>}
+        {resetState.message && <div className={`mode-banner ${resetState.status === "error" ? "error" : "good"}`}>{resetState.message}</div>}
         <label className="field">
           <span>User account</span>
           <select value={selectedName} onChange={(event) => setSelectedName(event.target.value)}>
@@ -582,8 +634,70 @@ function LoginScreen({ data, loadState, onLogin, repo, dataMode }) {
         <button className="primary login-button" disabled={!selectedUser || loginState.status === "loading" || (dataMode === "convex" && !password)} onClick={submitLogin}>
           <ShieldCheck size={18} /> {loginState.status === "loading" ? "Signing in..." : "Login"}
         </button>
+        {dataMode === "convex" && (
+          <details className="forgot-password">
+            <summary>Forgot password?</summary>
+            <label className="field">
+              <span>Reset note</span>
+              <input value={resetNote} onChange={(event) => setResetNote(event.target.value)} placeholder="Optional note for Admin" />
+            </label>
+            <button className="ghost" disabled={!selectedUser || resetState.status === "loading"} onClick={requestReset}>
+              {resetState.status === "loading" ? "Sending request..." : "Send reset request"}
+            </button>
+          </details>
+        )}
       </section>
     </main>
+  );
+}
+
+function AccountSecurity({ dataMode, repo, sessionToken, onChanged, onError }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [status, setStatus] = useState("idle");
+  if (dataMode !== "convex") return null;
+  const update = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+  const submit = () => {
+    if (form.newPassword !== form.confirmPassword) {
+      onError(new Error("New password and confirmation do not match."));
+      return;
+    }
+    setStatus("loading");
+    repo.changePasswordAsync({ sessionToken, currentPassword: form.currentPassword, newPassword: form.newPassword })
+      .then(() => {
+        setStatus("idle");
+        setForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+        setOpen(false);
+        onChanged("Password changed.");
+      })
+      .catch((error) => {
+        setStatus("idle");
+        onError(error);
+      });
+  };
+  return (
+    <section className="account-security">
+      <button className="ghost" onClick={() => setOpen((value) => !value)}><ShieldCheck size={15} /> Change password</button>
+      {open && (
+        <div className="password-form">
+          <label className="field compact">
+            <span>Current password</span>
+            <input type="password" value={form.currentPassword} onChange={(event) => update("currentPassword", event.target.value)} autoComplete="current-password" />
+          </label>
+          <label className="field compact">
+            <span>New password</span>
+            <input type="password" value={form.newPassword} onChange={(event) => update("newPassword", event.target.value)} autoComplete="new-password" />
+          </label>
+          <label className="field compact">
+            <span>Confirm password</span>
+            <input type="password" value={form.confirmPassword} onChange={(event) => update("confirmPassword", event.target.value)} autoComplete="new-password" />
+          </label>
+          <button className="primary" disabled={status === "loading" || !form.currentPassword || !form.newPassword || !form.confirmPassword} onClick={submit}>
+            {status === "loading" ? "Saving..." : "Save password"}
+          </button>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1177,9 +1291,8 @@ function normalizeDraftProposal(proposal) {
   };
 }
 
-function MasterData({ data, access }) {
+function MasterData({ data, access, dataMode, repo, sessionToken, passwordResetRequests = [], onPasswordReset, onError }) {
   const sets = [
-    ["Users and roles", data.users.map((u) => ({ name: u.name, role: u.role, office: u.office }))],
     ["Municipality-district map", data.masterData.municipalities],
     ["Major Final Outputs / OPIF services", data.masterData.mfos],
     ["Programs and PAPs", data.masterData.programs],
@@ -1190,12 +1303,100 @@ function MasterData({ data, access }) {
   ];
   return (
     <section className="content-stack">
+      <UserPasswordAdmin
+        users={data.users}
+        resetRequests={passwordResetRequests}
+        dataMode={dataMode}
+        repo={repo}
+        sessionToken={sessionToken}
+        onPasswordReset={onPasswordReset}
+        onError={onError}
+      />
       {sets.map(([title, rows]) => (
         <Panel key={title} title={title} icon={Settings} action={access?.canManageMasterData && <button className="ghost"><Plus size={16} /> Add</button>}>
           <pre className="json-card">{JSON.stringify(rows, null, 2)}</pre>
         </Panel>
       ))}
     </section>
+  );
+}
+
+function UserPasswordAdmin({ users = [], resetRequests = [], dataMode, repo, sessionToken, onPasswordReset, onError }) {
+  const [selectedUserId, setSelectedUserId] = useState(users[0]?._id || "");
+  const [newPassword, setNewPassword] = useState("");
+  const [requestId, setRequestId] = useState("");
+  const [status, setStatus] = useState("idle");
+  useEffect(() => {
+    if (!selectedUserId && users[0]?._id) setSelectedUserId(users[0]._id);
+  }, [users, selectedUserId]);
+  const selectedUser = users.find((user) => user._id === selectedUserId) || users[0];
+  const openRequests = resetRequests.filter((request) => request.status === "Open");
+  const submit = () => {
+    if (dataMode !== "convex" || !selectedUser?._id) return;
+    setStatus("loading");
+    repo.adminResetPasswordAsync({ sessionToken, userId: selectedUser._id, newPassword, requestId: requestId || undefined })
+      .then(() => {
+        setStatus("idle");
+        setNewPassword("");
+        setRequestId("");
+        onPasswordReset?.();
+      })
+      .catch((error) => {
+        setStatus("idle");
+        onError?.(error);
+      });
+  };
+  return (
+    <Panel title="Users, Roles, and Password Reset" icon={Users}>
+      <div className="admin-password-grid">
+        <div className="password-form admin-reset-form">
+          <label className="field">
+            <span>User account</span>
+            <select value={selectedUserId} onChange={(event) => setSelectedUserId(event.target.value)}>
+              {users.map((user) => (
+                <option key={user._id || user.name} value={user._id}>{user.name} - {user.office || "No office"} - {user.role}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>New temporary password</span>
+            <input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="Minimum 8 characters" autoComplete="new-password" />
+          </label>
+          <label className="field">
+            <span>Related forgot-password request</span>
+            <select value={requestId} onChange={(event) => setRequestId(event.target.value)}>
+              <option value="">No request selected</option>
+              {openRequests.map((request) => (
+                <option key={request._id} value={request._id}>{request.name} - {formatDateTime(request.requestedAt)}</option>
+              ))}
+            </select>
+          </label>
+          <button className="primary" disabled={dataMode !== "convex" || status === "loading" || !selectedUser?._id || newPassword.length < 8} onClick={submit}>
+            {status === "loading" ? "Resetting..." : "Reset selected password"}
+          </button>
+        </div>
+        <DataTable
+          rows={users.map((u) => ({ id: u._id || u.name, name: u.name, role: u.role, office: u.office, status: u.status || "Active" }))}
+          columns={[["name", "Name"], ["role", "Role"], ["office", "Office"], ["status", "Status"]]}
+        />
+      </div>
+      <div className="reset-request-block">
+        <h4>Forgot-password requests</h4>
+        <DataTable
+          rows={resetRequests.map((request) => ({
+            id: request._id,
+            name: request.name,
+            office: request.office,
+            status: request.status,
+            requestedAt: formatDateTime(request.requestedAt),
+            resolvedBy: request.resolvedBy || "",
+            note: request.note || "",
+          }))}
+          columns={[["name", "User"], ["office", "Office"], ["status", "Status"], ["requestedAt", "Requested"], ["resolvedBy", "Resolved by"], ["note", "Note"]]}
+          formatters={{ status: (value) => <StatusBadge value={value} /> }}
+        />
+      </div>
+    </Panel>
   );
 }
 

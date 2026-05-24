@@ -59,6 +59,17 @@ button { cursor: pointer; }
 .login-access-card span { color: var(--muted); font-size: 12px; margin-top: 3px; }
 .login-access-card ul { margin: 10px 0 0; padding-left: 18px; color: #344238; line-height: 1.6; }
 .login-button { justify-content: center; min-height: 42px; }
+.forgot-password {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.forgot-password summary {
+  color: var(--blue);
+  font-weight: 800;
+  cursor: pointer;
+}
+.forgot-password .field { margin-top: 10px; }
+.forgot-password .ghost { margin-top: 10px; }
 
 .app-shell {
   min-height: 100vh;
@@ -493,6 +504,44 @@ tr.selected td, tbody tr:hover td { background: #f7faf7; }
   font-weight: 700;
 }
 
+.account-security {
+  border: 1px solid #cbd7cf;
+  border-radius: 8px;
+  background: #fff;
+  padding: 11px 13px;
+  display: grid;
+  gap: 12px;
+}
+
+.account-security > .ghost {
+  justify-self: start;
+}
+
+.password-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.admin-password-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, .75fr) minmax(0, 1.25fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.admin-reset-form {
+  grid-template-columns: 1fr;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 13px;
+  background: #f8faf8;
+}
+
+.reset-request-block { margin-top: 16px; }
+.reset-request-block h4 { margin: 0 0 10px; font-size: 14px; }
+
 .toast {
   border: 1px solid #b9dec7;
   border-radius: 8px;
@@ -575,6 +624,7 @@ input:disabled, select:disabled, textarea:disabled, button:disabled {
   .access-banner ul, .phase-action-buttons { justify-content: flex-start; }
   .filter-strip { display: grid; grid-template-columns: 1fr; justify-content: stretch; width: 100%; }
   .field.compact, .field.compact select { width: 100%; min-width: 0; }
+  .password-form, .admin-password-grid { grid-template-columns: 1fr; }
   .topbar h2 { font-size: 22px; }
   .topbar p { max-width: 100%; }
 }

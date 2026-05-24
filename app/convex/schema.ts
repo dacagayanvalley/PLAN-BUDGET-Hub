@@ -45,6 +45,19 @@ export default defineSchema({
     .index("by_sessionToken", ["sessionToken"])
     .index("by_userId", ["userId"]),
 
+  passwordResetRequests: defineTable({
+    userId: v.optional(v.id("users")),
+    name: v.string(),
+    office: v.optional(v.string()),
+    status: v.string(),
+    note: v.optional(v.string()),
+    requestedAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+    resolvedBy: v.optional(v.string()),
+  })
+    .index("by_status", ["status"])
+    .index("by_userId", ["userId"]),
+
   proposals: defineTable({
     proposalId: v.string(),
     fiscalYear: v.string(),

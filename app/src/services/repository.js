@@ -102,6 +102,22 @@ export class ConvexRepository {
     return this.assertClient().mutation(anyApi.auth.logout, { sessionToken });
   }
 
+  async changePasswordAsync({ sessionToken, currentPassword, newPassword }) {
+    return this.assertClient().mutation(anyApi.auth.changePassword, { sessionToken, currentPassword, newPassword });
+  }
+
+  async adminResetPasswordAsync({ sessionToken, userId, newPassword, requestId }) {
+    return this.assertClient().mutation(anyApi.auth.adminResetPassword, { sessionToken, userId, newPassword, requestId });
+  }
+
+  async requestPasswordResetAsync({ name, note }) {
+    return this.assertClient().mutation(anyApi.auth.requestPasswordReset, { name, note });
+  }
+
+  async listPasswordResetRequestsAsync(sessionToken) {
+    return this.assertClient().query(anyApi.auth.listPasswordResetRequests, { sessionToken });
+  }
+
   async loadAllAsync({ fiscalYear = "2027", sessionToken } = {}) {
     const client = this.assertClient();
     const [masterData, proposals, phaseHistory, bulkSubmissions, attachments] = await Promise.all([
