@@ -11,6 +11,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "convex:dev": "convex dev",
     "convex:deploy": "convex deploy",
+    "import:spatial-xlsx": "node scripts/import-spatial-workbook-to-convex.js",
     "seed:convex-master": "node scripts/seed-convex-master-data.js",
     "seed:csv": "node scripts/seed-google-sheets.js",
     "schema:csv": "node scripts/create-google-sheet-template.js"

@@ -129,6 +129,46 @@ export const importMunicipalityBatch = mutation({
   },
 });
 
+export const registerBulkSubmission = mutation({
+  args: {
+    submissionId: v.string(),
+    fiscalYear: v.string(),
+    sourceFile: v.string(),
+    program: v.optional(v.string()),
+    office: v.optional(v.string()),
+    templateCode: v.optional(v.string()),
+    phase: v.optional(v.string()),
+    status: v.string(),
+    remarks: v.optional(v.string()),
+    actor: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const existing = await ctx.db.query("bulkSubmissions").withIndex("by_submissionId", (q) => q.eq("submissionId", args.submissionId)).first();
+    const doc = {
+      submissionId: args.submissionId,
+      fiscalYear: args.fiscalYear,
+      sourceFile: args.sourceFile,
+      program: args.program,
+      office: args.office,
+      templateCode: args.templateCode,
+      phase: args.phase,
+      status: args.status,
+      remarks: args.remarks,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+      createdBy: existing?.createdBy || args.actor,
+      updatedBy: args.actor,
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id, doc);
+      return { updated: 1, inserted: 0 };
+    }
+    await ctx.db.insert("bulkSubmissions", doc);
+    return { updated: 0, inserted: 1 };
+  },
+});
+
 function isEdited(row: { createdAt?: number; updatedAt?: number; createdBy?: string; updatedBy?: string }) {
   if (row.createdBy && row.updatedBy && row.createdBy !== row.updatedBy) return true;
   if (!row.createdAt && row.updatedAt) return true;
