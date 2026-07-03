@@ -2,6 +2,8 @@
 
 Use this guide when moving PLAN-BUDGET Hub from demo/local mode to production Google Sheets and Drive storage.
 
+For the shortest path, use the automation guide first: `docs/google-drive-automation.md`.
+
 ## 1. Create the Drive folders
 
 Create one root folder:

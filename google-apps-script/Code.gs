@@ -1,12 +1,74 @@
 const SPREADSHEET_ID = 'PUT_PRODUCTION_SPREADSHEET_ID_HERE';
 const DRIVE_ROOT_FOLDER_ID = 'PUT_PLAN_BUDGET_HUB_ROOT_FOLDER_ID_HERE';
 
+const DATABASE_HEADERS = {
+  proposals: ['id', 'fiscal_year', 'title', 'description', 'office', 'program', 'subprogram', 'pap', 'uacs', 'province', 'municipality', 'district', 'commodity', 'intervention_type', 'beneficiary_group', 'beneficiaries', 'budget_amount', 'nep_amount', 'gaa_amount', 'tier', 'source', 'justification', 'expected_output', 'expected_outcome', 'readiness_status', 'climate_tag', 'climate_rationale', 'gedsi_tag', 'schedule', 'remarks', 'validation_status', 'current_phase', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  budget_lines: ['id', 'proposal_id', 'object_code', 'expense_class', 'amount', 'phase', 'month', 'quarter', 'fund_source', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  physical_targets: ['id', 'proposal_id', 'indicator', 'target', 'unit', 'phase', 'month', 'quarter', 'beneficiary_count', 'group_beneficiary_count', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  phase_history: ['id', 'proposal_id', 'phase', 'snapshot_date', 'budget_amount', 'physical_target', 'editor', 'remarks', 'source_report', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  attachments: ['id', 'proposal_id', 'drive_file_id', 'drive_url', 'folder_path', 'document_type', 'name', 'phase', 'uploaded_by', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  bulk_submissions: ['id', 'fiscal_year', 'program', 'office', 'template_code', 'phase', 'source_file', 'drive_file_id', 'converted_sheet_id', 'drive_folder_url', 'status', 'duplicate_of', 'submitted_at', 'submitted_by', 'remarks', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  bulk_submission_rows: ['id', 'bulk_submission_id', 'source_sheet', 'source_row_number', 'raw_json', 'mapped_proposal_id', 'validation_status', 'validation_notes', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  validation_issues: ['id', 'proposal_id', 'bulk_submission_id', 'bulk_submission_row_id', 'rule_code', 'severity', 'message', 'status', 'resolved_at', 'resolved_by', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  audit_logs: ['id', 'actor', 'role', 'action', 'entity_type', 'entity_id', 'before_json', 'after_json', 'timestamp'],
+  users: ['id', 'name', 'email', 'role', 'office', 'active', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  offices: ['id', 'name', 'office_type', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  municipalities: ['id', 'name', 'province', 'district', 'psgc', 'income_class', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  districts: ['id', 'name', 'province', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  programs: ['id', 'name', 'prexc_program', 'uacs', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  paps: ['id', 'program', 'name', 'uacs', 'prexc_subprogram', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  mfos: ['id', 'code', 'name', 'parent_mfo', 'description', 'source_file', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  commodities: ['id', 'name', 'program', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  intervention_types: ['id', 'name', 'program', 'mfo', 'source_indicator', 'source_file', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  indicators: ['id', 'name', 'unit', 'program', 'mfo', 'pi_level', 'indicator_type', 'definition', 'source_file', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  units_of_measure: ['id', 'name', 'description', 'source_file', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  object_codes: ['id', 'uacs_object_code', 'name', 'expense_class', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  expense_classes: ['id', 'name', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  climate_tags: ['id', 'name', 'requires_rationale', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  gedsi_tags: ['id', 'name', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  form_templates: ['id', 'code', 'name', 'source_file', 'phase', 'output_format', 'config_json', 'active_from_fy', 'active_to_fy', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  bulk_import_templates: ['id', 'code', 'name', 'description', 'expectedSheets', 'requiredColumns', 'mapping_json', 'importMode', 'sourceBasis', 'allow_multiple_programs', 'allow_multiple_offices', 'program_detection', 'active', 'created_at', 'updated_at', 'created_by', 'updated_by']
+};
+
 function spreadsheet_() {
   return SpreadsheetApp.openById(extractId_(SPREADSHEET_ID));
 }
 
 function driveRootFolder_() {
   return DriveApp.getFolderById(extractId_(DRIVE_ROOT_FOLDER_ID));
+}
+
+function setupDatabase() {
+  return initializeDatabase_();
+}
+
+function initializeDatabase_() {
+  const spreadsheet = spreadsheet_();
+  const createdTabs = [];
+  const updatedTabs = [];
+  Object.keys(DATABASE_HEADERS).forEach(function(sheetName) {
+    let sheet = spreadsheet.getSheetByName(sheetName);
+    if (!sheet) {
+      sheet = spreadsheet.insertSheet(sheetName);
+      createdTabs.push(sheetName);
+    }
+    const headers = DATABASE_HEADERS[sheetName];
+    const existingWidth = Math.max(sheet.getLastColumn(), headers.length);
+    const existing = existingWidth ? sheet.getRange(1, 1, 1, existingWidth).getValues()[0].map(String) : [];
+    const missing = headers.filter(function(header) { return existing.indexOf(header) < 0; });
+    if (!existing.some(Boolean) || missing.length) {
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      sheet.setFrozenRows(1);
+      updatedTabs.push(sheetName);
+    }
+  });
+
+  const root = driveRootFolder_();
+  ['00 System Config', '01 Bulk Submissions', '02 Proposal Attachments', '03 Generated Reports', '04 Templates', '99 Archive'].forEach(function(name) {
+    getOrCreateFolder_(root, name);
+  });
+
+  return { createdTabs: createdTabs, updatedTabs: updatedTabs };
 }
 
 function doPost(e) {
@@ -395,14 +457,7 @@ function ensureHeaders_(sheet, object) {
 }
 
 function defaultHeaders_(sheetName, object) {
-  const defaults = {
-    proposals: ['id', 'fiscal_year', 'title', 'description', 'office', 'program', 'subprogram', 'mfo', 'pap', 'uacs', 'province', 'municipality', 'district', 'commodity', 'intervention_type', 'beneficiary_group', 'beneficiaries', 'budget_amount', 'nep_amount', 'gaa_amount', 'tier', 'source', 'justification', 'expected_output', 'expected_outcome', 'readiness_status', 'climate_tag', 'climate_rationale', 'gedsi_tag', 'schedule', 'remarks', 'validation_status', 'current_phase', 'created_at', 'updated_at', 'created_by', 'updated_by'],
-    bulk_submissions: ['id', 'fiscal_year', 'program', 'office', 'template_code', 'phase', 'source_file', 'drive_file_id', 'converted_sheet_id', 'drive_folder_url', 'status', 'duplicate_of', 'submitted_at', 'submitted_by', 'remarks', 'created_at', 'updated_at', 'created_by', 'updated_by'],
-    bulk_submission_rows: ['id', 'bulk_submission_id', 'source_sheet', 'source_row_number', 'raw_json', 'mapped_proposal_id', 'validation_status', 'validation_notes', 'created_at', 'updated_at', 'created_by', 'updated_by'],
-    validation_issues: ['id', 'proposal_id', 'bulk_submission_id', 'bulk_submission_row_id', 'rule_code', 'severity', 'message', 'status', 'resolved_at', 'resolved_by', 'created_at', 'updated_at', 'created_by', 'updated_by'],
-    audit_logs: ['id', 'actor', 'role', 'action', 'entity_type', 'entity_id', 'before_json', 'after_json', 'timestamp']
-  };
-  return defaults[sheetName] || Object.keys(object);
+  return DATABASE_HEADERS[sheetName] || Object.keys(object);
 }
 
 function getOrCreateFolder_(parent, name) {
