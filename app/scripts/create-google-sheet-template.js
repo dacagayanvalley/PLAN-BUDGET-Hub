@@ -5,7 +5,7 @@ const outDir = path.resolve("../export-templates/google-sheet-schema");
 fs.mkdirSync(outDir, { recursive: true });
 
 const schemas = {
-  proposals: ["id", "fiscal_year", "title", "description", "office", "program", "subprogram", "pap", "uacs", "province", "municipality", "district", "commodity", "intervention_type", "beneficiary_group", "beneficiaries", "budget_amount", "nep_amount", "gaa_amount", "tier", "source", "justification", "expected_output", "expected_outcome", "readiness_status", "climate_tag", "climate_rationale", "gedsi_tag", "schedule", "remarks", "validation_status", "current_phase", "created_at", "updated_at", "created_by", "updated_by"],
+  proposals: ["id", "fiscal_year", "title", "description", "office", "program", "subprogram", "mfo", "pap", "uacs", "province", "municipality", "district", "commodity", "intervention_type", "beneficiary_group", "beneficiaries", "budget_amount", "nep_amount", "gaa_amount", "tier", "source", "justification", "expected_output", "expected_outcome", "readiness_status", "climate_tag", "climate_rationale", "gedsi_tag", "schedule", "remarks", "validation_status", "current_phase", "created_at", "updated_at", "created_by", "updated_by"],
   budget_lines: ["id", "proposal_id", "object_code", "expense_class", "amount", "phase", "month", "quarter", "fund_source", "created_at", "updated_at", "created_by", "updated_by"],
   physical_targets: ["id", "proposal_id", "indicator", "target", "unit", "phase", "month", "quarter", "beneficiary_count", "group_beneficiary_count", "created_at", "updated_at", "created_by", "updated_by"],
   phase_history: ["id", "proposal_id", "phase", "snapshot_date", "budget_amount", "physical_target", "editor", "remarks", "source_report", "created_at", "updated_at", "created_by", "updated_by"],
@@ -20,9 +20,11 @@ const schemas = {
   districts: ["id", "name", "province", "created_at", "updated_at", "created_by", "updated_by"],
   programs: ["id", "name", "prexc_program", "uacs", "created_at", "updated_at", "created_by", "updated_by"],
   paps: ["id", "program", "name", "uacs", "prexc_subprogram", "created_at", "updated_at", "created_by", "updated_by"],
+  mfos: ["id", "code", "name", "parent_mfo", "description", "source_file", "created_at", "updated_at", "created_by", "updated_by"],
   commodities: ["id", "name", "program", "created_at", "updated_at", "created_by", "updated_by"],
-  intervention_types: ["id", "name", "program", "created_at", "updated_at", "created_by", "updated_by"],
-  indicators: ["id", "name", "unit", "program", "indicator_type", "created_at", "updated_at", "created_by", "updated_by"],
+  intervention_types: ["id", "name", "program", "mfo", "source_indicator", "source_file", "created_at", "updated_at", "created_by", "updated_by"],
+  indicators: ["id", "name", "unit", "program", "mfo", "pi_level", "indicator_type", "definition", "source_file", "created_at", "updated_at", "created_by", "updated_by"],
+  units_of_measure: ["id", "name", "description", "source_file", "created_at", "updated_at", "created_by", "updated_by"],
   object_codes: ["id", "uacs_object_code", "name", "expense_class", "created_at", "updated_at", "created_by", "updated_by"],
   expense_classes: ["id", "name", "created_at", "updated_at", "created_by", "updated_by"],
   climate_tags: ["id", "name", "requires_rationale", "created_at", "updated_at", "created_by", "updated_by"],

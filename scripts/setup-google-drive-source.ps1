@@ -21,6 +21,40 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Assert-GoogleId {
+  param(
+    [string]$Name,
+    [string]$Value
+  )
+
+  if (-not $Value -or -not $Value.Trim()) {
+    throw "$Name is required. Pass a Google Sheet/Drive URL or the raw Google ID."
+  }
+
+  if ($Value -match "PASTE_|PUT_|YOUR_") {
+    throw "$Name still contains placeholder text: $Value"
+  }
+
+  if ($Value -notmatch "^[-\w]{25,}$") {
+    throw "$Name must contain a Google file/folder ID with at least 25 letters, numbers, underscores, or dashes. Received: $Value"
+  }
+}
+
+function Assert-AppsScriptUrl {
+  param([string]$Value)
+
+  if (-not $Value -or -not $Value.Trim()) {
+    return
+  }
+
+  if ($Value -match "YOUR_|PASTE_") {
+    throw "AppsScriptUrl still contains placeholder text: $Value"
+  }
+
+  if ($Value -notmatch "^https://script\.google\.com/macros/s/[^/]+/exec$") {
+    throw "AppsScriptUrl must look like https://script.google.com/macros/s/DEPLOYMENT_ID/exec"
+  }
+}
 function Resolve-RepoRoot {
   $scriptPath = Split-Path -Parent $MyInvocation.ScriptName
   return (Resolve-Path (Join-Path $scriptPath "..")).Path
@@ -80,8 +114,17 @@ if (-not (Test-Path $codePath)) {
 
 $sheetId = Extract-GoogleId $SpreadsheetId
 $driveId = Extract-GoogleId $DriveRootFolderId
+Assert-GoogleId "SpreadsheetId" $sheetId
+Assert-GoogleId "DriveRootFolderId" $driveId
+Assert-AppsScriptUrl $AppsScriptUrl
 
 $code = Get-Content -LiteralPath $codePath -Raw
+if ($code -notmatch "const SPREADSHEET_ID = '.*?';") {
+  throw "Could not find SPREADSHEET_ID constant in $codePath"
+}
+if ($code -notmatch "const DRIVE_ROOT_FOLDER_ID = '.*?';") {
+  throw "Could not find DRIVE_ROOT_FOLDER_ID constant in $codePath"
+}
 $code = [regex]::Replace($code, "const SPREADSHEET_ID = '.*?';", "const SPREADSHEET_ID = '$sheetId';")
 $code = [regex]::Replace($code, "const DRIVE_ROOT_FOLDER_ID = '.*?';", "const DRIVE_ROOT_FOLDER_ID = '$driveId';")
 [System.IO.File]::WriteAllText($codePath, $code, (New-Object System.Text.UTF8Encoding($false)))
