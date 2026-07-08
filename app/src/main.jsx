@@ -175,6 +175,11 @@ function readSavedSessionToken() {
   }
 }
 
+const googleDefaultUser = { name: "System Admin", role: "Admin", office: "RICT" };
+
+function readInitialUser() {
+  return readSavedUser() || (dataMode === "google" ? googleDefaultUser : null);
+}
 function friendlyErrorMessage(error) {
   if (typeof error?.data === "string") return error.data;
   if (error?.data?.message) return error.data.message;
@@ -185,7 +190,7 @@ function App() {
   const [active, setActiveState] = useState(() => window.location.hash.replace("#", "") || "dashboard");
   const [data, setData] = useState(() => repo.loadAll());
   const [loadState, setLoadState] = useState({ status: ["google", "convex"].includes(dataMode) && dataSourceInfo.configured ? "loading" : "ready", error: "", refreshedAt: "" });
-  const [currentUser, setCurrentUser] = useState(() => readSavedUser());
+  const [currentUser, setCurrentUser] = useState(() => readInitialUser());
   const [sessionToken, setSessionToken] = useState(() => readSavedSessionToken());
   const [filters, setFilters] = useState({
     fiscalYear: "2027",
@@ -198,7 +203,7 @@ function App() {
   const [saveNotice, setSaveNotice] = useState("");
   const [passwordResetRequests, setPasswordResetRequests] = useState([]);
   const isGoogleConfigured = dataMode !== "google" || dataSourceInfo.configured;
-  const isAuthenticated = Boolean(currentUser && isGoogleConfigured && (dataMode !== "convex" || sessionToken));
+  const isAuthenticated = dataMode === "google" ? isGoogleConfigured : Boolean(currentUser && isGoogleConfigured && (dataMode !== "convex" || sessionToken));
   const baseAccess = currentUser ? (accessProfiles[normalizeAccessRole(currentUser.role)] || accessProfiles["Read-only Viewer"]) : activeAccess(data);
   const access = currentUser && baseAccess.label === "Planning Officer" && !canSessionApprove(currentUser) ? { ...baseAccess, canAdvance: false } : baseAccess;
   const visibleNavItems = useMemo(() => navItems.filter((item) => canAccessNav(item, access)), [access]);
@@ -231,6 +236,11 @@ function App() {
     window.location.hash = firstNav;
   };
   const signOut = () => {
+    if (dataMode === "google") {
+      setCurrentUser(googleDefaultUser);
+      setData((current) => ({ ...current, session: { user: googleDefaultUser.name, role: googleDefaultUser.role, office: googleDefaultUser.office } }));
+      return;
+    }
     if (dataMode === "convex" && sessionToken) repo.logoutAsync?.(sessionToken).catch(() => undefined);
     window.localStorage.removeItem("planBudgetUser");
     window.localStorage.removeItem("planBudgetSession");
@@ -343,7 +353,7 @@ function App() {
     return <GoogleSetupScreen />;
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated && dataMode === "convex") {
     return <LoginScreen data={data} loadState={loadState} onLogin={signIn} repo={repo} dataMode={dataMode} />;
   }
 
