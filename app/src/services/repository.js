@@ -34,7 +34,7 @@ export const emptyData = {
 };
 
 export function getDataMode() {
-  return import.meta.env.VITE_DATA_MODE || (import.meta.env.PROD ? "google" : "google");
+  return import.meta.env.VITE_DATA_MODE || (import.meta.env.PROD ? "convex" : "empty");
 }
 
 export function getDataSourceInfo(mode = getDataMode()) {
