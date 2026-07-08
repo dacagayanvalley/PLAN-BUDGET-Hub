@@ -28,12 +28,13 @@ import {
   Users,
 } from "lucide-react";
 import "./styles.css";
-import { createRepository, getDataMode } from "./services/repository.js";
+import { createRepository, getDataMode, getDataSourceInfo, saveGoogleEndpoint } from "./services/repository.js";
 import { formatPeso, toCsv, downloadText } from "./utils/format.js";
 import { createBlankProposal, findDuplicateBulkSubmission, validateProposal, validateAll } from "./utils/validation.js";
 
 const dataMode = getDataMode();
 const repo = createRepository(dataMode);
+const dataSourceInfo = getDataSourceInfo(dataMode);
 
 const lifecyclePhases = ["Proposal", "NEP", "GAA", "Implementation", "Monitoring and Evaluation"];
 
@@ -183,7 +184,7 @@ function friendlyErrorMessage(error) {
 function App() {
   const [active, setActiveState] = useState(() => window.location.hash.replace("#", "") || "dashboard");
   const [data, setData] = useState(() => repo.loadAll());
-  const [loadState, setLoadState] = useState({ status: ["google", "convex"].includes(dataMode) ? "loading" : "ready", error: "" });
+  const [loadState, setLoadState] = useState({ status: ["google", "convex"].includes(dataMode) && dataSourceInfo.configured ? "loading" : "ready", error: "", refreshedAt: "" });
   const [currentUser, setCurrentUser] = useState(() => readSavedUser());
   const [sessionToken, setSessionToken] = useState(() => readSavedSessionToken());
   const [filters, setFilters] = useState({
@@ -196,7 +197,8 @@ function App() {
   const [selectedProposalId, setSelectedProposalId] = useState(data.proposals[0]?.id);
   const [saveNotice, setSaveNotice] = useState("");
   const [passwordResetRequests, setPasswordResetRequests] = useState([]);
-  const isAuthenticated = Boolean(currentUser && (dataMode !== "convex" || sessionToken));
+  const isGoogleConfigured = dataMode !== "google" || dataSourceInfo.configured;
+  const isAuthenticated = Boolean(currentUser && isGoogleConfigured && (dataMode !== "convex" || sessionToken));
   const baseAccess = currentUser ? (accessProfiles[normalizeAccessRole(currentUser.role)] || accessProfiles["Read-only Viewer"]) : activeAccess(data);
   const access = currentUser && baseAccess.label === "Planning Officer" && !canSessionApprove(currentUser) ? { ...baseAccess, canAdvance: false } : baseAccess;
   const visibleNavItems = useMemo(() => navItems.filter((item) => canAccessNav(item, access)), [access]);
@@ -246,55 +248,55 @@ function App() {
         return rows || [];
       })
       .catch((error) => {
-        setLoadState({ status: "error", error: friendlyErrorMessage(error) });
+        setLoadState((current) => ({ status: "error", error: friendlyErrorMessage(error), refreshedAt: current.refreshedAt || "" }));
         return [];
       });
   };
 
   const reloadProductionData = () => {
-    if (!["google", "convex"].includes(dataMode)) return undefined;
+    if (!["google", "convex"].includes(dataMode) || !isGoogleConfigured) return undefined;
     if (dataMode === "convex" && !sessionToken) return undefined;
-    setLoadState({ status: "loading", error: "" });
+    setLoadState((current) => ({ status: "loading", error: "", refreshedAt: current.refreshedAt || "" }));
     return repo.loadAllAsync({ fiscalYear: filters.fiscalYear, sessionToken })
       .then((nextData) => {
         setData(applySessionUser(nextData));
         setSelectedProposalId(nextData.proposals[0]?.id);
-        setLoadState({ status: "ready", error: "" });
+        setLoadState({ status: "ready", error: "", refreshedAt: new Date().toISOString() });
         loadPasswordResetRequests();
       })
       .catch((error) => {
-        setLoadState({ status: "error", error: friendlyErrorMessage(error) });
+        setLoadState((current) => ({ status: "error", error: friendlyErrorMessage(error), refreshedAt: current.refreshedAt || "" }));
       });
   };
 
   useEffect(() => {
     let cancelled = false;
-    if (!["google", "convex"].includes(dataMode)) return undefined;
+    if (!["google", "convex"].includes(dataMode) || !isGoogleConfigured) return undefined;
     if (dataMode === "convex" && !sessionToken) {
       repo.loadLoginUsersAsync?.()
         .then((users) => {
           if (!cancelled) setData((current) => ({ ...current, users: users || [] }));
         })
         .catch((error) => {
-          if (!cancelled) setLoadState({ status: "error", error: friendlyErrorMessage(error) });
+          if (!cancelled) setLoadState((current) => ({ status: "error", error: friendlyErrorMessage(error), refreshedAt: current.refreshedAt || "" }));
         });
-      setLoadState({ status: "ready", error: "" });
+      setLoadState({ status: "ready", error: "", refreshedAt: new Date().toISOString() });
       return () => {
         cancelled = true;
       };
     }
-    setLoadState({ status: "loading", error: "" });
+    setLoadState((current) => ({ status: "loading", error: "", refreshedAt: current.refreshedAt || "" }));
     repo.loadAllAsync({ fiscalYear: filters.fiscalYear, sessionToken })
       .then((nextData) => {
         if (cancelled) return;
         setData(applySessionUser(nextData));
         setSelectedProposalId(nextData.proposals[0]?.id);
-        setLoadState({ status: "ready", error: "" });
+        setLoadState({ status: "ready", error: "", refreshedAt: new Date().toISOString() });
         loadPasswordResetRequests();
       })
       .catch((error) => {
         if (cancelled) return;
-        setLoadState({ status: "error", error: friendlyErrorMessage(error) });
+        setLoadState((current) => ({ status: "error", error: friendlyErrorMessage(error), refreshedAt: current.refreshedAt || "" }));
       });
     return () => {
       cancelled = true;
@@ -337,6 +339,10 @@ function App() {
     });
   }, [data.proposals, filters]);
 
+  if (!isGoogleConfigured) {
+    return <GoogleSetupScreen />;
+  }
+
   if (!isAuthenticated) {
     return <LoginScreen data={data} loadState={loadState} onLogin={signIn} repo={repo} dataMode={dataMode} />;
   }
@@ -361,7 +367,7 @@ function App() {
           setSelectedProposalId("__new__");
           flashSaveNotice(setSaveNotice);
         })
-        .catch((error) => setLoadState({ status: "error", error: friendlyErrorMessage(error) }));
+        .catch((error) => setLoadState((current) => ({ status: "error", error: friendlyErrorMessage(error), refreshedAt: current.refreshedAt || "" })));
     } else {
       setData((current) => repo.saveProposal(current, next));
       setSelectedProposalId("__new__");
@@ -382,7 +388,7 @@ function App() {
       repo.advancePhaseAsync({ proposalId: proposal.id, toPhase, remarks, actor: data.session.user, sessionToken })
         .then(() => reloadProductionData())
         .then(() => flashSaveNotice(setSaveNotice, `${proposal.id} moved to ${toPhase}.`))
-        .catch((error) => setLoadState({ status: "error", error: friendlyErrorMessage(error) }));
+        .catch((error) => setLoadState((current) => ({ status: "error", error: friendlyErrorMessage(error), refreshedAt: current.refreshedAt || "" })));
       return;
     }
     setData((current) => ({
@@ -437,7 +443,7 @@ function App() {
           ...current,
           bulkSubmissions: [saved || next, ...(current.bulkSubmissions || [])],
         })))
-        .catch((error) => setLoadState({ status: "error", error: friendlyErrorMessage(error) }));
+        .catch((error) => setLoadState((current) => ({ status: "error", error: friendlyErrorMessage(error), refreshedAt: current.refreshedAt || "" })));
       return;
     }
     setData((current) => ({
@@ -485,7 +491,7 @@ function App() {
       </aside>
 
       <main className="workspace">
-        <ProductionBanner dataMode={dataMode} loadState={loadState} />
+        <ProductionBanner dataMode={dataMode} loadState={loadState} sourceInfo={dataSourceInfo} data={data} />
         {saveNotice && <div className="toast good">{saveNotice}</div>}
         <Header data={data} filters={filters} setFilters={setFilters} onRefresh={reloadProductionData} loadState={loadState} />
         <AccessBanner data={data} access={access} onSignOut={signOut} />
@@ -494,7 +500,7 @@ function App() {
           repo={repo}
           sessionToken={sessionToken}
           onChanged={(message) => flashSaveNotice(setSaveNotice, message)}
-          onError={(error) => setLoadState({ status: "error", error: friendlyErrorMessage(error) })}
+          onError={(error) => setLoadState((current) => ({ status: "error", error: friendlyErrorMessage(error), refreshedAt: current.refreshedAt || "" }))}
         />
         {active === "dashboard" && (
           <Dashboard data={data} proposals={filteredProposals} validationResults={validationResults} />
@@ -524,7 +530,7 @@ function App() {
               flashSaveNotice(setSaveNotice, message);
               return loadPasswordResetRequests().then(() => reloadProductionData());
             }}
-            onError={(error) => setLoadState({ status: "error", error: friendlyErrorMessage(error) })}
+            onError={(error) => setLoadState((current) => ({ status: "error", error: friendlyErrorMessage(error), refreshedAt: current.refreshedAt || "" }))}
           />
         )}
         {active === "validation" && (
@@ -547,6 +553,51 @@ function App() {
   );
 }
 
+function GoogleSetupScreen() {
+  const [endpoint, setEndpoint] = useState("");
+  const [error, setError] = useState("");
+  const saveEndpoint = () => {
+    const value = endpoint.trim();
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(value)) {
+      setError("Paste the Apps Script web app URL ending in /exec.");
+      return;
+    }
+    saveGoogleEndpoint(value);
+    window.location.reload();
+  };
+
+  return (
+    <main className="login-page google-setup-page">
+      <section className="login-panel google-setup-panel">
+        <div className="brand-block login-brand">
+          <div className="seal">DA</div>
+          <div>
+            <h1>PLAN-BUDGET Hub</h1>
+            <p>Google Sheets database setup</p>
+          </div>
+        </div>
+        <div className="login-copy">
+          <h2>Connect Google Sheets</h2>
+          <p>Paste the Google Apps Script web app URL for your PLAN-BUDGET Hub spreadsheet database.</p>
+        </div>
+        {error && <div className="mode-banner error">{error}</div>}
+        <label className="field">
+          <span>Apps Script web app URL</span>
+          <input
+            value={endpoint}
+            onChange={(event) => setEndpoint(event.target.value)}
+            placeholder="https://script.google.com/macros/s/.../exec"
+          />
+        </label>
+        <button className="primary login-button" onClick={saveEndpoint}>Connect Google Sheets</button>
+        <div className="login-access-card">
+          <strong>Only one URL is needed here.</strong>
+          <span>The Sheet ID and Drive folder ID live inside the Apps Script code you deployed from this project.</span>
+        </div>
+      </section>
+    </main>
+  );
+}
 function LoginScreen({ data, loadState, onLogin, repo, dataMode }) {
   const users = useMemo(() => {
     const source = data.users?.length ? data.users : [
@@ -604,10 +655,15 @@ function LoginScreen({ data, loadState, onLogin, repo, dataMode }) {
         </div>
         <div className="login-copy">
           <h2>Sign in to continue</h2>
-          <p>Use your authorized account password. Privileges are verified by Convex before database access is allowed.</p>
+          <p>{dataMode === "convex" ? "Use your authorized account password. Privileges are verified before database access is allowed." : "Choose your role to open the Google Sheets-backed planning workspace."}</p>
         </div>
-        {loadState.status === "loading" && <div className="mode-banner">Loading authorized user accounts from Convex...</div>}
-        {loadState.status === "error" && <div className="mode-banner error">{loadState.error}</div>}
+        {loadState.status === "loading" && <div className="mode-banner">Loading production records from {dataMode === "convex" ? "Convex" : "Google Sheets"}...</div>}
+        {loadState.status === "error" && (
+          <div className="mode-banner error source-banner">
+            <span>{loadState.error}</span>
+            {dataMode === "google" && <button className="ghost compact-action" onClick={() => { saveGoogleEndpoint(""); window.location.reload(); }}>Change Google source</button>}
+          </div>
+        )}
         {loginState.status === "error" && <div className="mode-banner error">{loginState.error}</div>}
         {resetState.message && <div className={`mode-banner ${resetState.status === "error" ? "error" : "good"}`}>{resetState.message}</div>}
         <label className="field">
@@ -641,7 +697,7 @@ function LoginScreen({ data, loadState, onLogin, repo, dataMode }) {
           </ul>
         </div>
         <button className="primary login-button" disabled={!selectedUser || loginState.status === "loading" || (dataMode === "convex" && !password)} onClick={submitLogin}>
-          <ShieldCheck size={18} /> {loginState.status === "loading" ? "Signing in..." : "Login"}
+          <ShieldCheck size={18} /> {loginState.status === "loading" ? "Signing in..." : dataMode === "convex" ? "Login" : "Open workspace"}
         </button>
         {dataMode === "convex" && (
           <details className="forgot-password">
@@ -807,12 +863,12 @@ function BulkSubmission({ data, onSubmit }) {
   );
 }
 
-function ProductionBanner({ dataMode, loadState }) {
+function ProductionBanner({ dataMode, loadState, sourceInfo, data }) {
   if (dataMode === "demo") {
-    return <div className="mode-banner warn">Demo mode is using sample training records. Set <code>VITE_DATA_MODE=convex</code> for production.</div>;
+    return <div className="mode-banner warn">Demo mode is using sample training records. Set <code>VITE_DATA_MODE=google</code> for production.</div>;
   }
   if (dataMode === "empty") {
-    return <div className="mode-banner">Empty local mode. Set <code>VITE_DATA_MODE=convex</code> and <code>VITE_CONVEX_URL</code> to use the production database.</div>;
+    return <div className="mode-banner">Empty local mode. Set <code>VITE_DATA_MODE=google</code> to use the Google Sheets database.</div>;
   }
   if (loadState.status === "loading") {
     return <div className="mode-banner">Loading production records from {dataMode === "convex" ? "Convex" : "Google Sheets"}...</div>;
@@ -820,8 +876,16 @@ function ProductionBanner({ dataMode, loadState }) {
   if (loadState.status === "error") {
     return <div className="mode-banner error">{dataMode === "convex" ? "Convex" : "Google Sheets"} connection error: {loadState.error}</div>;
   }
-  if (dataMode === "convex") return <div className="mode-banner good">Production mode connected to Convex.</div>;
-  return <div className="mode-banner good">Production mode connected to Google Sheets.</div>;
+  const refreshed = loadState.refreshedAt ? new Date(loadState.refreshedAt).toLocaleString() : "Not refreshed yet";
+  const rowCount = `${(data.proposals || []).length.toLocaleString()} proposals`;
+  return (
+    <div className="mode-banner good source-banner">
+      <span>Production mode connected to {sourceInfo.label}.</span>
+      <span>Source: <code>{sourceInfo.detail}</code></span>
+      <span>Last refresh: {refreshed}</span>
+      <span>{rowCount}</span>
+    </div>
+  );
 }
 
 function AccessBanner({ data, access, onSignOut }) {
@@ -1795,7 +1859,7 @@ function Validation({ data, validationResults, onEdit }) {
               <div className="validation-row-header">
                 <div>
                   <strong>{row.title}</strong>
-                  <span>{row.proposalId} · {row.interventionType || "No intervention"} · {row.municipality || "No municipality"}</span>
+                  <span>{row.proposalId} - {row.interventionType || "No intervention"} - {row.municipality || "No municipality"}</span>
                 </div>
                 <div className="validation-tags">
                   <StatusBadge value={row.status} />

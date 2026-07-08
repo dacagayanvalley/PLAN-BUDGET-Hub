@@ -34,12 +34,46 @@ export const emptyData = {
 };
 
 export function getDataMode() {
-  return import.meta.env.VITE_DATA_MODE || (import.meta.env.PROD ? "convex" : "empty");
+  return import.meta.env.VITE_DATA_MODE || (import.meta.env.PROD ? "google" : "google");
+}
+
+export function getDataSourceInfo(mode = getDataMode()) {
+  if (mode === "google") {
+    const endpoint = getGoogleEndpoint();
+    return {
+      mode,
+      label: "Google Sheets",
+      detail: endpoint ? maskUrl(endpoint) : "VITE_APPS_SCRIPT_URL is not set",
+      configured: Boolean(endpoint),
+    };
+  }
+  if (mode === "convex") {
+    const url = import.meta.env.VITE_CONVEX_URL || "";
+    return {
+      mode,
+      label: "Convex",
+      detail: url ? maskUrl(url) : "VITE_CONVEX_URL is not set",
+      configured: Boolean(url),
+    };
+  }
+  return { mode, label: mode === "demo" ? "Demo seed data" : "Empty local data", detail: "No production backend", configured: true };
+}
+
+function maskUrl(value) {
+  try {
+    const url = new URL(value);
+    const token = url.pathname.split("/").filter(Boolean).at(-2) || url.hostname;
+    const suffix = token.length > 8 ? token.slice(-8) : token;
+    return `${url.hostname} ...${suffix}`;
+  } catch {
+    const text = String(value || "");
+    return text.length > 18 ? `${text.slice(0, 10)}...${text.slice(-8)}` : text;
+  }
 }
 
 export function createRepository(mode = getDataMode()) {
   if (mode === "convex") return new ConvexRepository();
-  if (mode === "google") return new GoogleSheetsRepository();
+  if (mode === "google") return new GoogleSheetsRepository({ endpoint: getGoogleEndpoint() });
   if (mode === "demo") return new MockRepository();
   return new EmptyRepository();
 }
@@ -234,18 +268,38 @@ function userPayload(user, { sessionToken, includePassword = false }) {
   };
 }
 
+export function getGoogleEndpoint() {
+  const envEndpoint = import.meta.env.VITE_APPS_SCRIPT_URL || "";
+  if (envEndpoint.trim()) return envEndpoint.trim();
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem("planBudgetGoogleEndpoint") || "";
+  } catch {
+    return "";
+  }
+}
+
+export function saveGoogleEndpoint(endpoint) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem("planBudgetGoogleEndpoint", String(endpoint || "").trim());
+}
+
 export class GoogleSheetsRepository {
-  constructor({ endpoint = import.meta.env.VITE_APPS_SCRIPT_URL } = {}) {
+  constructor({ endpoint = getGoogleEndpoint() } = {}) {
     this.endpoint = endpoint;
   }
 
   async request(action, payload = {}) {
     if (!this.endpoint) {
-      throw new Error("VITE_APPS_SCRIPT_URL is required for Google Sheets mode.");
+      throw new Error("Paste your Google Apps Script web app URL to connect Google Sheets.");
     }
     const response = await fetch(this.endpoint, {
       method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      cache: "no-store",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8",
+        "Cache-Control": "no-cache",
+      },
       body: JSON.stringify({ action, payload }),
     });
     const json = await response.json();

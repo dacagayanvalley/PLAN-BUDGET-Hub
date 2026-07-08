@@ -327,6 +327,20 @@ tr.selected td, tbody tr:hover td { background: #f7faf7; }
 .ghost { background: #fff; color: var(--ink); padding: 7px 10px; }
 .ghost:disabled { color: var(--muted); cursor: wait; opacity: .72; }
 .refresh-button { align-self: end; }
+.source-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+}
+.source-banner code {
+  font-size: 12px;
+}
+.compact-action {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
 
 .status {
   display: inline-flex;
