@@ -13,9 +13,20 @@ const budgetLine = v.object({
 
 const physicalTarget = v.object({
   id: v.optional(v.string()),
+  indicatorId: v.optional(v.string()),
   indicator: v.optional(v.string()),
+  indicatorType: v.optional(v.string()),
+  piLevel1: v.optional(v.string()),
+  piLevel2: v.optional(v.string()),
+  piLevel3: v.optional(v.string()),
+  baseline: v.optional(v.number()),
   target: v.number(),
+  accomplishment: v.optional(v.number()),
   unit: v.optional(v.string()),
+  dataSource: v.optional(v.string()),
+  meansOfVerification: v.optional(v.string()),
+  reportingFrequency: v.optional(v.string()),
+  responsibleOffice: v.optional(v.string()),
 });
 
 const proposalFields = {
@@ -34,6 +45,13 @@ const proposalFields = {
   district: v.optional(v.string()),
   commodity: v.optional(v.string()),
   interventionType: v.optional(v.string()),
+  kra: v.optional(v.string()),
+  activity: v.optional(v.string()),
+  impactContribution: v.optional(v.string()),
+  dataSource: v.optional(v.string()),
+  meansOfVerification: v.optional(v.string()),
+  reportingFrequency: v.optional(v.string()),
+  responsibleOffice: v.optional(v.string()),
   beneficiaryGroup: v.optional(v.string()),
   beneficiaries: v.number(),
   budgetAmount: v.number(),
@@ -335,6 +353,10 @@ function buildSearchText(proposal: Record<string, unknown>) {
     proposal.district,
     proposal.commodity,
     proposal.interventionType,
+    proposal.kra,
+    proposal.activity,
+    proposal.expectedOutput,
+    proposal.expectedOutcome,
     proposal.tier,
   ].filter(Boolean).join(" ");
 }
